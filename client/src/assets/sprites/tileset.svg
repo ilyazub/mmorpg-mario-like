@@ -1,0 +1,63 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ground blocks -->
+  <g id="ground">
+    <rect x="0" y="0" width="16" height="16" fill="#8F563B" />
+    <rect x="1" y="1" width="14" height="1" fill="#9F664C" />
+    <rect x="1" y="14" width="14" height="1" fill="#704832" />
+    <rect x="1" y="2" width="1" height="12" fill="#9F664C" />
+    <rect x="14" y="2" width="1" height="12" fill="#704832" />
+  </g>
+  
+  <!-- Question block -->
+  <g id="question-block" transform="translate(16, 0)">
+    <rect x="0" y="0" width="16" height="16" fill="#F9A602" />
+    <rect x="4" y="4" width="8" height="8" fill="#FBD000" />
+    <rect x="6" y="6" width="4" height="4" fill="#FFFFFF" />
+  </g>
+
+  <!-- Brick block -->
+  <g id="brick-block" transform="translate(32, 0)">
+    <rect x="0" y="0" width="16" height="16" fill="#E52521" />
+    <rect x="0" y="4" width="16" height="1" fill="#8F563B" />
+    <rect x="0" y="12" width="16" height="1" fill="#8F563B" />
+    <rect x="4" y="0" width="1" height="16" fill="#8F563B" />
+    <rect x="12" y="0" width="1" height="16" fill="#8F563B" />
+  </g>
+  
+  <!-- Pipe top -->
+  <g id="pipe-top" transform="translate(0, 16)">
+    <rect x="0" y="0" width="16" height="16" fill="#4CBB17" />
+    <rect x="2" y="2" width="12" height="12" fill="#3AA60F" />
+  </g>
+  
+  <!-- Pipe body -->
+  <g id="pipe-body" transform="translate(16, 16)">
+    <rect x="0" y="0" width="16" height="16" fill="#4CBB17" />
+    <rect x="2" y="0" width="12" height="16" fill="#3AA60F" />
+  </g>
+  
+  <!-- Cloud part -->
+  <g id="cloud" transform="translate(32, 16)">
+    <rect x="0" y="0" width="16" height="16" fill="#FFFFFF" />
+    <rect x="2" y="2" width="12" height="12" fill="#E6F7FF" />
+  </g>
+  
+  <!-- Bush part -->
+  <g id="bush" transform="translate(0, 32)">
+    <rect x="0" y="0" width="16" height="16" fill="#4CBB17" />
+    <rect x="2" y="2" width="4" height="4" fill="#3AA60F" />
+    <rect x="10" y="2" width="4" height="4" fill="#3AA60F" />
+    <rect x="6" y="6" width="4" height="4" fill="#3AA60F" />
+  </g>
+  
+  <!-- Hill part -->
+  <g id="hill" transform="translate(16, 32)">
+    <rect x="0" y="0" width="16" height="16" fill="#8F563B" />
+    <polygon points="8,0 16,16 0,16" fill="#9F664C" />
+  </g>
+  
+  <!-- Sky background -->
+  <g id="sky" transform="translate(32, 32)">
+    <rect x="0" y="0" width="16" height="16" fill="#5C94FC" />
+  </g>
+</svg>

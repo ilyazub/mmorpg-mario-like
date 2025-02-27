@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+:root {
+  --font-pixel: 'Press Start 2P', cursive;
+  --font-retro: 'VT323', monospace;
+  
+  --color-mario-red: #E52521;
+  --color-pipe-green: #4CBB17;
+  --color-coin-yellow: #FBD000;
+  --color-sky-blue: #5C94FC;
+  --color-block-brown: #8F563B;
+}
+
+.font-pixel {
+  font-family: var(--font-pixel);
+}
+
+.font-retro {
+  font-family: var(--font-retro);
+}
+
+.text-mario-red {
+  color: var(--color-mario-red);
+}
+
+.text-pipe-green {
+  color: var(--color-pipe-green);
+}
+
+.text-coin-yellow {
+  color: var(--color-coin-yellow);
+}
+
+.text-sky-blue {
+  color: var(--color-sky-blue);
+}
+
+.bg-mario-red {
+  background-color: var(--color-mario-red);
+}
+
+.bg-pipe-green {
+  background-color: var(--color-pipe-green);
+}
+
+.bg-coin-yellow {
+  background-color: var(--color-coin-yellow);
+}
+
+.bg-sky-blue {
+  background-color: var(--color-sky-blue);
+}
+
+.bg-block-brown {
+  background-color: var(--color-block-brown);
+}

@@ -1,0 +1,23 @@
+<svg width="16" height="22" viewBox="0 0 16 22" xmlns="http://www.w3.org/2000/svg">
+  <!-- Luigi's hat and head -->
+  <rect x="3" y="0" width="10" height="4" fill="#4CBB17"/>
+  <rect x="1" y="4" width="14" height="4" fill="#4CBB17"/>
+  <!-- Face -->
+  <rect x="5" y="4" width="6" height="4" fill="#FFCCAA"/>
+  <!-- Eyes -->
+  <rect x="6" y="5" width="2" height="2" fill="#000000"/>
+  <!-- Mustache -->
+  <rect x="4" y="7" width="8" height="1" fill="#000000"/>
+  <!-- Body -->
+  <rect x="3" y="8" width="10" height="8" fill="#4CBB17"/>
+  <!-- Overalls -->
+  <rect x="5" y="10" width="6" height="6" fill="#2244CC"/>
+  <rect x="3" y="12" width="2" height="4" fill="#2244CC"/>
+  <rect x="11" y="12" width="2" height="4" fill="#2244CC"/>
+  <!-- Hands -->
+  <rect x="1" y="10" width="2" height="2" fill="#FFCCAA"/>
+  <rect x="13" y="10" width="2" height="2" fill="#FFCCAA"/>
+  <!-- Feet -->
+  <rect x="2" y="16" width="4" height="2" fill="#825C00"/>
+  <rect x="10" y="16" width="4" height="2" fill="#825C00"/>
+</svg>

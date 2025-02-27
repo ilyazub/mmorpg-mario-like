@@ -1,0 +1,31 @@
+<svg width="16" height="22" viewBox="0 0 16 22" xmlns="http://www.w3.org/2000/svg">
+  <!-- Toad's mushroom cap -->
+  <rect x="1" y="0" width="14" height="6" fill="#FFFFFF"/>
+  <rect x="3" y="0" width="2" height="2" fill="#E52521"/>
+  <rect x="7" y="0" width="2" height="2" fill="#E52521"/>
+  <rect x="11" y="0" width="2" height="2" fill="#E52521"/>
+  <rect x="1" y="2" width="2" height="2" fill="#E52521"/>
+  <rect x="5" y="2" width="2" height="2" fill="#E52521"/>
+  <rect x="9" y="2" width="2" height="2" fill="#E52521"/>
+  <rect x="13" y="2" width="2" height="2" fill="#E52521"/>
+  <rect x="3" y="4" width="2" height="2" fill="#E52521"/>
+  <rect x="7" y="4" width="2" height="2" fill="#E52521"/>
+  <rect x="11" y="4" width="2" height="2" fill="#E52521"/>
+  <!-- Face -->
+  <rect x="5" y="6" width="6" height="4" fill="#FFCCAA"/>
+  <!-- Eyes -->
+  <rect x="6" y="7" width="1" height="1" fill="#000000"/>
+  <rect x="9" y="7" width="1" height="1" fill="#000000"/>
+  <!-- Body -->
+  <rect x="5" y="10" width="6" height="6" fill="#FFFFFF"/>
+  <!-- Vest -->
+  <rect x="5" y="10" width="6" height="2" fill="#2244CC"/>
+  <rect x="5" y="12" width="1" height="4" fill="#2244CC"/>
+  <rect x="10" y="12" width="1" height="4" fill="#2244CC"/>
+  <!-- Hands -->
+  <rect x="3" y="10" width="2" height="2" fill="#FFCCAA"/>
+  <rect x="11" y="10" width="2" height="2" fill="#FFCCAA"/>
+  <!-- Feet -->
+  <rect x="4" y="16" width="3" height="2" fill="#825C00"/>
+  <rect x="9" y="16" width="3" height="2" fill="#825C00"/>
+</svg>
