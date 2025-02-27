@@ -10,24 +10,23 @@ export default function GameMenu({
   onShowSettings 
 }: GameMenuProps) {
   return (
-    <div className="flex space-x-3 no-select">
+    <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-3">
       <button 
-        id="startGame" 
-        className="font-pixel text-xs md:text-sm text-white bg-mario-red px-3 py-2 rounded hover:bg-red-700 transition"
+        className="font-pixel text-white bg-mario-red px-4 py-2 rounded hover:bg-red-700 transition"
         onClick={onStartGame}
       >
         START GAME
       </button>
+      
       <button 
-        id="instructions" 
-        className="font-pixel text-xs md:text-sm text-white bg-pipe-green px-3 py-2 rounded hover:bg-green-700 transition"
+        className="font-pixel text-white bg-block-brown px-4 py-2 rounded hover:bg-yellow-700 transition"
         onClick={onShowInstructions}
       >
-        HOW TO PLAY
+        INSTRUCTIONS
       </button>
+      
       <button 
-        id="settings" 
-        className="font-pixel text-xs md:text-sm text-white bg-block-brown px-3 py-2 rounded hover:bg-yellow-700 transition"
+        className="font-pixel text-white bg-pipe-green px-4 py-2 rounded hover:bg-green-700 transition"
         onClick={onShowSettings}
       >
         SETTINGS

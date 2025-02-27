@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useGameEngine3D } from '@/hooks/useGameEngine3D';
+import { useGameEngine3D } from '../hooks/useGameEngine3D';
 import Game3DCanvas from './Game3DCanvas';
 import CharacterSelector from './CharacterSelector';
 import MobileControls from './MobileControls';
 import GameMenu from './GameMenu';
 import InstructionsModal from './InstructionsModal';
 import SettingsModal from './SettingsModal';
-import { GameSettings3D } from '@/game/engine3d';
+import { GameSettings3D } from '../game/engine3d';
 
 export default function Game3DContainer() {
   const [showInstructions, setShowInstructions] = useState(false);

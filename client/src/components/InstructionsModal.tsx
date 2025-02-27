@@ -1,44 +1,81 @@
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from './ui/dialog';
+import { Button } from './ui/button';
+
 interface InstructionsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
 export default function InstructionsModal({ isOpen, onClose }: InstructionsModalProps) {
-  if (!isOpen) return null;
-  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
-      <div className="bg-gray-900 w-11/12 max-w-lg rounded-lg p-6 border-4 border-block-brown">
-        <h2 className="font-pixel text-mario-red text-xl mb-4">HOW TO PLAY</h2>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="bg-gray-900 border-mario-red max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-mario-red font-pixel text-2xl">
+            How to Play
+          </DialogTitle>
+          <DialogDescription className="text-gray-300">
+            Learn the controls and mechanics of Super Mario 3D MMORPG
+          </DialogDescription>
+        </DialogHeader>
         
-        <div className="font-retro text-white text-lg space-y-3 mb-6">
-          <p>Welcome to Pixel Adventure! This is a Mario-like platformer where you can jump, collect coins, and avoid enemies.</p>
+        <div className="space-y-6 text-white">
+          <div>
+            <h3 className="font-pixel text-pipe-green text-lg mb-2">Basic Controls</h3>
+            <ul className="space-y-2 list-disc pl-5">
+              <li><span className="font-bold">Desktop:</span> Use WASD or Arrow Keys to move your character and Spacebar to jump</li>
+              <li><span className="font-bold">Mobile:</span> Use the on-screen D-pad to move and the 'B' button to jump</li>
+              <li>Press the 'A' button or 'E' key to interact with objects and other players</li>
+            </ul>
+          </div>
           
-          <h3 className="font-pixel text-coin-yellow">CONTROLS:</h3>
-          <ul className="list-disc pl-5">
-            <li>Use <span className="text-sky-blue">Arrow Keys or WASD</span> to move</li>
-            <li>Press <span className="text-sky-blue">Space</span> or <span className="text-sky-blue">Up Arrow</span> to jump</li>
-            <li>Collect coins to increase your score</li>
-            <li>Avoid falling off platforms</li>
-          </ul>
+          <div>
+            <h3 className="font-pixel text-coin-yellow text-lg mb-2">Game Objectives</h3>
+            <ul className="space-y-2 list-disc pl-5">
+              <li>Collect coins scattered throughout the world</li>
+              <li>Jump on platforms to reach new areas</li>
+              <li>Interact with other players in this multiplayer world</li>
+              <li>Avoid falling off platforms or you'll lose a life!</li>
+            </ul>
+          </div>
           
-          <h3 className="font-pixel text-coin-yellow">CHARACTERS:</h3>
-          <ul className="list-disc pl-5">
-            <li><span className="text-mario-red">Mario</span> - Balanced stats</li>
-            <li><span className="text-pipe-green">Luigi</span> - Higher jump</li>
-            <li><span className="text-coin-yellow">Toad</span> - Faster speed</li>
-          </ul>
+          <div>
+            <h3 className="font-pixel text-sky-blue text-lg mb-2">Characters</h3>
+            <p>Each character has unique abilities:</p>
+            <ul className="space-y-2 list-disc pl-5">
+              <li><span className="font-bold text-mario-red">Mario:</span> Balanced speed and jump height</li>
+              <li><span className="font-bold text-green-500">Luigi:</span> Higher jump but slightly slower</li>
+              <li><span className="font-bold text-blue-500">Toad:</span> Faster movement but lower jump</li>
+              <li><span className="font-bold text-yellow-500">Princess:</span> Floats briefly during jumps</li>
+            </ul>
+          </div>
+          
+          <div>
+            <h3 className="font-pixel text-mario-red text-lg mb-2">Multiplayer Features</h3>
+            <ul className="space-y-2 list-disc pl-5">
+              <li>See other players in real-time as they explore the world</li>
+              <li>Compete for the highest score</li>
+              <li>Collaborate to find hidden areas</li>
+            </ul>
+          </div>
         </div>
         
-        <div className="flex justify-center">
-          <button 
-            className="font-pixel text-white bg-pipe-green px-4 py-2 rounded hover:bg-green-700 transition"
+        <DialogFooter>
+          <Button
             onClick={onClose}
+            className="bg-mario-red hover:bg-red-700 font-pixel"
           >
             GOT IT!
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { GameEngine3D } from '@/game/engine3d';
-import { Character } from '@/shared/schema';
+import { GameEngine3D } from '../game/engine3d';
+import { Character } from '../../shared/schema';
 
 interface Game3DCanvasProps {
   gameEngine: any;

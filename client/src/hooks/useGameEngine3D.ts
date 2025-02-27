@@ -1,197 +1,215 @@
-import { useEffect, useState, useRef } from 'react';
-import { GameEngine3D, GameSettings3D, GameState3D } from '@/game/engine3d';
-import { Character } from '@/game/engine';
-import io, { Socket } from 'socket.io-client';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { GameEngine3D, GameSettings3D } from '../game/engine3d';
+import { Character } from '../../shared/schema';
 
 export function useGameEngine3D() {
-  const gameEngineRef = useRef<GameEngine3D | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const socketRef = useRef<Socket | null>(null);
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [isGameStarted, setIsGameStarted] = useState(false);
-  const [isGameOver, setIsGameOver] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
-  const [gameStats, setGameStats] = useState({
-    coins: 0,
-    score: 0,
-    lives: 3,
-    time: 0,
-    world: 'World 1-1',
-  });
-  
-  const [characters] = useState<Character[]>([
+  const [gameEngine, setGameEngine] = useState<GameEngine3D | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [characters, setCharacters] = useState<Character[]>([
     {
       id: 'mario',
       name: 'Mario',
       sprite: '/assets/mario.png',
-      speed: 1.0,
-      jump: 1.0
+      speed: 8,
+      jump: 7
     },
     {
       id: 'luigi',
       name: 'Luigi',
       sprite: '/assets/luigi.png',
-      speed: 0.9,
-      jump: 1.2
+      speed: 7,
+      jump: 9
     },
     {
       id: 'toad',
       name: 'Toad',
       sprite: '/assets/toad.png',
-      speed: 1.2,
-      jump: 0.8
+      speed: 10,
+      jump: 5
+    },
+    {
+      id: 'princess',
+      name: 'Princess',
+      sprite: '/assets/princess.png',
+      speed: 6,
+      jump: 6
     }
   ]);
-
-  const initGame = (canvas: HTMLCanvasElement) => {
-    if (!canvas) return;
+  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGameStarted, setIsGameStarted] = useState(false);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [gameStats, setGameStats] = useState({
+    coins: 0,
+    score: 0,
+    lives: 3,
+    time: 0,
+    world: 'World 1-1'
+  });
+  
+  const initSocketConnection = useCallback(() => {
+    const newSocket = io({ transports: ['websocket'] });
     
-    canvasRef.current = canvas;
+    newSocket.on('connect', () => {
+      console.log('Connected to server');
+    });
     
-    // Create game engine instance
-    const engine = new GameEngine3D(canvas, characters);
-    gameEngineRef.current = engine;
+    newSocket.on('disconnect', () => {
+      console.log('Disconnected from server');
+    });
     
-    // Initialize the game (create terrain, platforms, etc.)
-    engine.initGame();
-    
-    // Setup socket connection for multiplayer
-    const socket = io();
-    socketRef.current = socket;
-    
-    // Listen for players joining
-    socket.on('playerJoin', (data: { id: string, character: Character, position: { x: number, y: number, z: number } }) => {
-      engine.addOnlineUser(data.id, data.character, data.position);
+    // Listen for other players joining
+    newSocket.on('playerJoin', (data: { id: string, character: Character, position: { x: number, y: number, z: number } }) => {
+      console.log('Player joined:', data);
+      if (gameEngine) {
+        gameEngine.addOnlineUser(data.id, data.character, data.position);
+      }
     });
     
     // Listen for player position updates
-    socket.on('playerMove', (data: { id: string, position: { x: number, y: number, z: number } }) => {
-      engine.updateOnlineUser(data.id, data.position);
+    newSocket.on('playerMove', (data: { id: string, position: { x: number, y: number, z: number } }) => {
+      if (gameEngine) {
+        gameEngine.updateOnlineUser(data.id, data.position);
+      }
     });
     
     // Listen for players leaving
-    socket.on('playerLeave', (id: string) => {
-      engine.removeOnlineUser(id);
+    newSocket.on('playerLeave', (id: string) => {
+      console.log('Player left:', id);
+      if (gameEngine) {
+        gameEngine.removeOnlineUser(id);
+      }
     });
     
-    // Resize handler
-    const handleResize = () => {
-      if (canvas && gameEngineRef.current) {
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-        gameEngineRef.current.resize(canvas.width, canvas.height);
+    setSocket(newSocket);
+    
+    return newSocket;
+  }, [gameEngine]);
+  
+  // Position update interval
+  const positionUpdateInterval = useRef<number | null>(null);
+  
+  // Cleanup function
+  const cleanup = useRef(() => {
+    if (positionUpdateInterval.current) {
+      window.clearInterval(positionUpdateInterval.current);
+    }
+    
+    if (socket) {
+      socket.disconnect();
+    }
+  });
+  
+  // Create the game engine
+  const initGame = useCallback((canvas: HTMLCanvasElement) => {
+    if (!selectedCharacter) return;
+    
+    setIsLoading(true);
+    
+    // Initialize game engine with canvas
+    const engine = new GameEngine3D(canvas, characters);
+    
+    // Select the character
+    engine.selectCharacter(selectedCharacter);
+    
+    // Initialize the game
+    engine.initGame();
+    
+    setGameEngine(engine);
+    setIsLoading(false);
+    
+    // Connect to websocket server if not already connected
+    const socketInstance = socket || initSocketConnection();
+    
+    // Send initial character selection to server
+    socketInstance.emit('selectCharacter', selectedCharacter);
+    
+    // Set up position update interval
+    positionUpdateInterval.current = window.setInterval(() => {
+      if (engine) {
+        const position = engine.getPlayerPosition();
+        socketInstance.emit('updatePosition', position);
       }
-    };
+    }, 100); // Update position 10 times per second
     
-    // Set initial size
-    handleResize();
-    
-    // Add resize listener
-    window.addEventListener('resize', handleResize);
-    
-    // State update interval
-    const stateInterval = setInterval(() => {
-      if (gameEngineRef.current) {
-        const gameState = gameEngineRef.current.state;
-        
-        setIsLoading(gameState.isLoading);
-        setIsGameOver(gameState.isGameOver);
-        setIsPaused(gameState.isPaused);
-        
+    // Update game stats from engine
+    const statsInterval = window.setInterval(() => {
+      if (engine) {
         setGameStats({
-          coins: gameState.coins,
-          score: gameState.score,
-          lives: gameState.lives,
-          time: Math.floor(gameState.time),
-          world: gameState.world
+          coins: engine.state.coins,
+          score: engine.state.score,
+          lives: engine.state.lives,
+          time: engine.state.time,
+          world: engine.state.world
         });
         
-        // Send position updates to server if game is running
-        if (!gameState.isLoading && !gameState.isPaused && !gameState.isGameOver && selectedCharacter) {
-          const position = gameEngineRef.current.getPlayerPosition();
-          socket.emit('updatePosition', { 
-            character: selectedCharacter,
-            position
-          });
+        // Check for game over
+        if (engine.state.isGameOver) {
+          setIsGameOver(true);
         }
       }
-    }, 100);
+    }, 500);
     
-    // Cleanup function
+    // Return cleanup function
     return () => {
-      window.removeEventListener('resize', handleResize);
-      clearInterval(stateInterval);
-      
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      clearInterval(statsInterval);
+      cleanup.current();
     };
-  };
-
-  const selectCharacter = (character: Character) => {
+  }, [characters, selectedCharacter, socket, initSocketConnection]);
+  
+  // Character selection
+  const selectCharacter = useCallback((character: Character) => {
     setSelectedCharacter(character);
-    
-    if (gameEngineRef.current) {
-      gameEngineRef.current.selectCharacter(character);
-    }
-    
-    // Notify server about character selection
-    if (socketRef.current) {
-      socketRef.current.emit('selectCharacter', character);
-    }
-  };
-
-  const startGame = () => {
-    if (gameEngineRef.current && selectedCharacter) {
-      gameEngineRef.current.startGame();
+  }, []);
+  
+  // Start game
+  const startGame = useCallback(() => {
+    if (gameEngine) {
+      gameEngine.startGame();
       setIsGameStarted(true);
     }
-  };
-
-  const pauseGame = () => {
-    if (gameEngineRef.current) {
-      gameEngineRef.current.pauseGame();
+  }, [gameEngine]);
+  
+  // Restart game
+  const restartGame = useCallback(() => {
+    if (gameEngine) {
+      gameEngine.restartGame();
+      setIsGameOver(false);
     }
-  };
-
-  const resumeGame = () => {
-    if (gameEngineRef.current) {
-      gameEngineRef.current.resumeGame();
+  }, [gameEngine]);
+  
+  // Update settings
+  const updateSettings = useCallback((settings: GameSettings3D) => {
+    if (gameEngine) {
+      gameEngine.updateSettings(settings);
     }
-  };
-
-  const restartGame = () => {
-    if (gameEngineRef.current) {
-      gameEngineRef.current.restartGame();
+  }, [gameEngine]);
+  
+  // Mobile controls
+  const handleTouchStart = useCallback((control: string) => {
+    if (gameEngine) {
+      gameEngine.setTouchControl(control, true);
     }
-  };
-
-  const updateSettings = (settings: Partial<GameSettings3D>) => {
-    if (gameEngineRef.current) {
-      gameEngineRef.current.updateSettings(settings);
+  }, [gameEngine]);
+  
+  const handleTouchEnd = useCallback((control: string) => {
+    if (gameEngine) {
+      gameEngine.setTouchControl(control, false);
     }
-  };
-
-  const handleTouchStart = (control: string) => {
-    if (gameEngineRef.current) {
-      gameEngineRef.current.setTouchControl(control, true);
-    }
-  };
-
-  const handleTouchEnd = (control: string) => {
-    if (gameEngineRef.current) {
-      gameEngineRef.current.setTouchControl(control, false);
-    }
-  };
-
+  }, [gameEngine]);
+  
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      cleanup.current();
+    };
+  }, []);
+  
   return {
     initGame,
     selectCharacter,
     startGame,
-    pauseGame,
-    resumeGame,
     restartGame,
     updateSettings,
     handleTouchStart,
@@ -201,8 +219,6 @@ export function useGameEngine3D() {
     isLoading,
     isGameStarted,
     isGameOver,
-    isPaused,
-    gameStats,
-    canvasRef
+    gameStats
   };
 }
