@@ -86,6 +86,10 @@ export default class MultiplayerPlatformer {
     this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
     this.scene.fog = new THREE.Fog(0x87CEEB, 30, 100); // Add fog for distant objects
     
+    // Setup parallax background layers
+    this.parallaxLayers = [];
+    this.setupParallaxBackground();
+    
     // Setup camera
     this.camera = new THREE.PerspectiveCamera(
       75, window.innerWidth / window.innerHeight, 0.1, 1000
@@ -380,6 +384,169 @@ export default class MultiplayerPlatformer {
     return colors[characterName] || 0x3333ff; // Default blue if not found
   }
   
+  setupParallaxBackground() {
+    // Theme-specific configurations for parallax backgrounds
+    const themeBackgrounds = {
+      grassland: [
+        { color: 0x87CEEB, z: -100, speed: 0.001 }, // Far sky
+        { color: 0xADD8E6, z: -90, speed: 0.005 },  // Mid sky
+        { color: 0xB0E0E6, z: -80, speed: 0.01 },   // Near sky
+        { color: 0x6B8E23, z: -70, speed: 0.02 },   // Far hills
+        { color: 0x556B2F, z: -60, speed: 0.03 },   // Mid hills
+        { color: 0x228B22, z: -50, speed: 0.05 }    // Near hills
+      ],
+      desert: [
+        { color: 0xFFD700, z: -100, speed: 0.001 }, // Far sky
+        { color: 0xFFB90F, z: -90, speed: 0.005 },  // Mid sky
+        { color: 0xFFA500, z: -80, speed: 0.01 },   // Near sky
+        { color: 0xDAA520, z: -70, speed: 0.02 },   // Far dunes
+        { color: 0xCD853F, z: -60, speed: 0.03 },   // Mid dunes
+        { color: 0xD2B48C, z: -50, speed: 0.05 }    // Near dunes
+      ],
+      snow: [
+        { color: 0xE0FFFF, z: -100, speed: 0.001 }, // Far sky
+        { color: 0xF0F8FF, z: -90, speed: 0.005 },  // Mid sky
+        { color: 0xF5F5F5, z: -80, speed: 0.01 },   // Near sky
+        { color: 0xE6E6FA, z: -70, speed: 0.02 },   // Far peaks
+        { color: 0xB0C4DE, z: -60, speed: 0.03 },   // Mid peaks
+        { color: 0xFFFFFF, z: -50, speed: 0.05 }    // Near peaks
+      ],
+      lava: [
+        { color: 0x800000, z: -100, speed: 0.001 }, // Far sky
+        { color: 0xA52A2A, z: -90, speed: 0.005 },  // Mid sky
+        { color: 0xCD5C5C, z: -80, speed: 0.01 },   // Near sky
+        { color: 0x8B0000, z: -70, speed: 0.02 },   // Far mountains
+        { color: 0xFF4500, z: -60, speed: 0.03 },   // Mid mountains
+        { color: 0xFF6347, z: -50, speed: 0.05 }    // Near mountains
+      ]
+    };
+
+    // Create parallax layers with matching current theme
+    const layers = themeBackgrounds[this.currentTheme] || themeBackgrounds.grassland;
+    
+    // Clear existing layers if needed
+    this.parallaxLayers.forEach(layer => {
+      if (layer.mesh) this.scene.remove(layer.mesh);
+    });
+    this.parallaxLayers = [];
+    
+    // Create each parallax layer
+    layers.forEach((layer, index) => {
+      // Create a large plane for each background layer
+      const geometry = new THREE.PlaneGeometry(500, 150, 1, 1);
+      const material = new THREE.MeshBasicMaterial({
+        color: layer.color,
+        transparent: index < 3, // Make sky layers transparent
+        opacity: index < 3 ? 0.8 : 1, // Sky layers are slightly transparent
+        side: THREE.DoubleSide
+      });
+      
+      const mesh = new THREE.Mesh(geometry, material);
+      
+      // Position the layer - vertical position depends on layer type
+      const yPos = index < 3 ? 20 + index * 5 : 0; // Sky layers are higher
+      mesh.position.set(0, yPos, layer.z);
+      mesh.rotation.y = Math.PI; // Face the camera
+      
+      // Add mountain/hill shapes to the foreground layers (not sky)
+      if (index >= 3) {
+        this.addTerrainShapeToLayer(mesh, index - 3);
+      }
+      
+      // Store the layer with its movement speed
+      this.parallaxLayers.push({
+        mesh,
+        speed: layer.speed,
+        originalZ: layer.z
+      });
+      
+      this.scene.add(mesh);
+    });
+  }
+  
+  addTerrainShapeToLayer(layerMesh, layerIndex) {
+    // Get original geometry
+    const geometry = layerMesh.geometry;
+    
+    // Determine the shape complexity based on layer
+    const divisions = 100 + layerIndex * 50; // More divisions for closer layers
+    const amplitude = 5 + layerIndex * 10;   // Taller peaks for closer layers
+    const frequency = 0.01 + layerIndex * 0.005; // Higher frequency for closer layers
+    
+    // Create new geometry with more vertices
+    const detailedGeometry = new THREE.PlaneGeometry(
+      geometry.parameters.width,
+      geometry.parameters.height,
+      divisions,
+      1
+    );
+    
+    // Apply displacement to create terrain silhouette
+    const positions = detailedGeometry.attributes.position.array;
+    
+    // Different noise patterns for different themes
+    let noiseFunction;
+    switch(this.currentTheme) {
+      case 'desert':
+        noiseFunction = (x) => Math.sin(x * 0.5) * Math.sin(x * 0.17) * Math.sin(x * 0.3); // Gentle dunes
+        break;
+      case 'snow':
+        noiseFunction = (x) => Math.abs(Math.sin(x * 0.2) * Math.cos(x * 0.3) * 1.5); // Jagged peaks
+        break;
+      case 'lava':
+        noiseFunction = (x) => Math.abs(Math.sin(x * 0.1) * Math.sin(x * 0.4) * 2); // Volcanic shapes
+        break;
+      default: // grassland
+        noiseFunction = (x) => Math.sin(x) * Math.sin(x * 0.4) * Math.sin(x * 0.7); // Rolling hills
+    }
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i];
+      // Apply noise to y-coordinate to create terrain silhouette
+      positions[i + 1] += amplitude * noiseFunction(x * frequency);
+    }
+    
+    // Update mesh with new geometry
+    layerMesh.geometry = detailedGeometry;
+  }
+  
+  updateParallaxLayers() {
+    if (!this.playerMesh) return;
+    
+    // Update each layer position based on player movement
+    this.parallaxLayers.forEach(layer => {
+      // Move layer based on player's x position with layer's speed factor
+      const parallaxX = -this.playerMesh.position.x * layer.speed;
+      layer.mesh.position.x = parallaxX;
+      
+      // Gradually change layer color when theme changes
+      if (this.themeChanged) {
+        this.updateLayerThemeColors(layer.mesh);
+      }
+    });
+  }
+  
+  updateLayerThemeColors(mesh) {
+    if (!mesh.material || !mesh.material.color) return;
+    
+    // Get target color based on current theme and layer
+    const layerIndex = this.parallaxLayers.findIndex(layer => layer.mesh === mesh);
+    if (layerIndex === -1) return;
+    
+    // Get appropriate color from theme
+    const themeColors = {
+      grassland: [0x87CEEB, 0xADD8E6, 0xB0E0E6, 0x6B8E23, 0x556B2F, 0x228B22],
+      desert: [0xFFD700, 0xFFB90F, 0xFFA500, 0xDAA520, 0xCD853F, 0xD2B48C],
+      snow: [0xE0FFFF, 0xF0F8FF, 0xF5F5F5, 0xE6E6FA, 0xB0C4DE, 0xFFFFFF],
+      lava: [0x800000, 0xA52A2A, 0xCD5C5C, 0x8B0000, 0xFF4500, 0xFF6347]
+    };
+    
+    const targetColor = new THREE.Color(themeColors[this.currentTheme][layerIndex] || 0xFFFFFF);
+    
+    // Smoothly transition to new color
+    mesh.material.color.lerp(targetColor, 0.01);
+  }
+
   initLights() {
     // Ambient light
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -2317,6 +2484,8 @@ export default class MultiplayerPlatformer {
     // Update procedural world generation
     if (this.playerMesh) {
       this.updateProceduralWorld();
+      // Update parallax background effect
+      this.updateParallaxLayers();
     }
     
     // Decrease attack cooldown
@@ -2561,6 +2730,12 @@ export default class MultiplayerPlatformer {
     this.scene.fog.color = new THREE.Color(themeProps.fogColor);
     this.scene.fog.near = themeProps.fogNear;
     this.scene.fog.far = themeProps.fogFar;
+    
+    // Flag for parallax layers to update their colors
+    this.themeChanged = true;
+    
+    // Rebuild parallax layers with new theme
+    this.setupParallaxBackground();
     
     // Ground and decoration changes will happen gradually as new sections are generated
   }
