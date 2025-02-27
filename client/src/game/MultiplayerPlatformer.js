@@ -12,6 +12,14 @@ export default class MultiplayerPlatformer {
     this.crushableObstacles = []; // Store crushable obstacles
     this.coins = []; // Store collectible coins
     this.powerUps = []; // Store power-ups
+    this.decorations = []; // Store decorative elements
+    this.platforms = []; // Store platforms
+    this.groundSegments = []; // Store ground segments
+    
+    // 360-degree world exploration
+    this.exploredZones = new Set(); // Track which grid zones we've generated
+    this.zoneSize = 50; // Size of each zone grid (50x50 units)
+    this.generationRadius = 3; // Generate zones 3 spaces out in each direction initially
     
     // UI elements
     this.uiContainer = document.createElement('div');
@@ -2682,7 +2690,7 @@ export default class MultiplayerPlatformer {
     animate();
   }
   
-  spawnRandomPowerUp() {
+  spawnRandomPowerUp(x = undefined, y = undefined, z = undefined) {
     // Define power-up types with their properties
     const powerUpTypes = [
       { 
@@ -2720,27 +2728,63 @@ export default class MultiplayerPlatformer {
     
     // Select a random power-up type
     const powerUpType = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+    let posX, posY, posZ;
     
-    // Find a good position for the power-up (random but accessible)
-    let x, y, z;
-    
-    // Option 1: Place on a platform
-    if (this.platforms.length > 0 && Math.random() > 0.4) {
-      const platform = this.platforms[Math.floor(Math.random() * this.platforms.length)];
-      x = platform.position.x + (Math.random() - 0.5) * platform.geometry.parameters.width * 0.7;
-      y = platform.position.y + platform.geometry.parameters.height / 2 + 0.6;
-      z = platform.position.z;
-    } 
-    // Option 2: Place in air along the path
+    // Use provided coordinates if available
+    if (x !== undefined && y !== undefined && z !== undefined) {
+      posX = x;
+      posY = y;
+      posZ = z;
+    }
+    // Otherwise find a good position for the power-up (random but accessible)
     else {
-      // Place it somewhere ahead of the player but visible
-      if (this.playerMesh) {
-        z = this.playerMesh.position.z - 20 - Math.random() * 40;
-      } else {
-        z = -20 - Math.random() * 40;
+      // Option 1: Place on a platform
+      if (this.platforms.length > 0 && Math.random() > 0.4) {
+        // Get eligible platforms (filter out very small platforms)
+        const eligiblePlatforms = this.platforms.filter(platform => {
+          if (!platform.geometry || !platform.geometry.parameters) return false;
+          if (platform.geometry.parameters.width && platform.geometry.parameters.width < 1) return false;
+          return true;
+        });
+        
+        if (eligiblePlatforms.length > 0) {
+          const platform = eligiblePlatforms[Math.floor(Math.random() * eligiblePlatforms.length)];
+          
+          // For box geometry
+          if (platform.geometry.parameters.width) {
+            posX = platform.position.x + (Math.random() - 0.5) * platform.geometry.parameters.width * 0.7;
+            posY = platform.position.y + platform.geometry.parameters.height / 2 + 0.6;
+            posZ = platform.position.z + (Math.random() - 0.5) * platform.geometry.parameters.depth * 0.7;
+          } 
+          // For cylindrical or spherical geometries
+          else if (platform.geometry.parameters.radius) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = platform.geometry.parameters.radius * 0.7 * Math.random();
+            posX = platform.position.x + Math.cos(angle) * radius;
+            posY = platform.position.y + 0.6;
+            posZ = platform.position.z + Math.sin(angle) * radius;
+          }
+          // Fallback for other geometries
+          else {
+            posX = platform.position.x;
+            posY = platform.position.y + 0.6;
+            posZ = platform.position.z;
+          }
+        } else {
+          // No eligible platforms, use Option 2
+          const positions = this.generateRandomAirPosition();
+          posX = positions.x;
+          posY = positions.y;
+          posZ = positions.z;
+        }
+      } 
+      // Option 2: Place in air at random location
+      else {
+        const positions = this.generateRandomAirPosition();
+        posX = positions.x;
+        posY = positions.y;
+        posZ = positions.z;
       }
-      x = (Math.random() - 0.5) * 15;
-      y = 1 + Math.random() * 3;
     }
     
     // Create the power-up mesh
@@ -2753,7 +2797,7 @@ export default class MultiplayerPlatformer {
     });
     
     const powerUp = new THREE.Mesh(powerUpType.geometry, material);
-    powerUp.position.set(x, y, z);
+    powerUp.position.set(posX, posY, posZ);
     powerUp.castShadow = true;
     
     // Add a glow effect
@@ -2770,16 +2814,57 @@ export default class MultiplayerPlatformer {
     powerUp.userData = {
       type: powerUpType.type,
       duration: powerUpType.duration,
-      multiplier: powerUpType.multiplier,
+      multiplier: powerUpType.multiplier || 1,
       isCollected: false,
-      originalY: y, // Store original Y for bobbing animation
-      zPosition: z
+      originalY: posY, // Store original Y for bobbing animation
+      createdAt: Date.now(), // For cleanup after some time
+      gridX: Math.floor(posX / this.zoneSize),
+      gridZ: Math.floor(posZ / this.zoneSize)
     };
     
     this.powerUps.push(powerUp);
     this.scene.add(powerUp);
     
     return powerUp;
+  }
+  
+  // Helper method to generate a random position in the air
+  generateRandomAirPosition() {
+    let x, y, z;
+    
+    // If player exists, generate position relative to player
+    if (this.playerMesh) {
+      // Create position in a sphere around the player
+      const distance = 5 + Math.random() * 20; // 5 to 25 units from player
+      const angle = Math.random() * Math.PI * 2; // Random horizontal angle
+      const elevation = (Math.random() - 0.5) * Math.PI; // Random vertical angle
+      
+      // Convert spherical coordinates to Cartesian
+      x = this.playerMesh.position.x + distance * Math.cos(angle) * Math.cos(elevation);
+      y = Math.max(1, this.playerMesh.position.y + distance * Math.sin(elevation));
+      z = this.playerMesh.position.z + distance * Math.sin(angle) * Math.cos(elevation);
+    } 
+    // No player, generate at random position in the world
+    else {
+      // Get a random existing zone
+      const zoneKeys = Array.from(this.exploredZones);
+      if (zoneKeys.length > 0) {
+        const randomZone = zoneKeys[Math.floor(Math.random() * zoneKeys.length)];
+        const [gridX, gridZ] = randomZone.split(',').map(Number);
+        
+        // Generate within that zone
+        x = gridX * this.zoneSize + (Math.random() - 0.5) * this.zoneSize * 0.8;
+        z = gridZ * this.zoneSize + (Math.random() - 0.5) * this.zoneSize * 0.8;
+        y = 1 + Math.random() * 5; // Random height between 1 and 6 units
+      } else {
+        // Fallback - central area
+        x = (Math.random() - 0.5) * 20;
+        z = (Math.random() - 0.5) * 20;
+        y = 1 + Math.random() * 5;
+      }
+    }
+    
+    return { x, y, z };
   }
   
   applyPowerUpEffect(powerUpType) {
