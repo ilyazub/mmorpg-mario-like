@@ -7,16 +7,16 @@ import { Character } from '../game/engine';
 
 export default function MultiplayerGameContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const gameRef = useRef<MultiplayerPlatformerInterface | null>(null);
+  const gameRef = useRef<any>(null);
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
   const [characters, setCharacters] = useState<Character[]>([
-    { id: '1', name: 'Mario', sprite: 'mario.png', speed: 5, jump: 10 },
-    { id: '2', name: 'Luigi', sprite: 'luigi.png', speed: 6, jump: 11 },
-    { id: '3', name: 'Peach', sprite: 'peach.png', speed: 4, jump: 8 },
-    { id: '4', name: 'Toad', sprite: 'toad.png', speed: 7, jump: 7 }
+    { id: '1', name: 'Atlas', sprite: 'hero_red.png', speed: 5, jump: 10 },
+    { id: '2', name: 'Nova', sprite: 'hero_blue.png', speed: 6, jump: 11 },
+    { id: '3', name: 'Orion', sprite: 'hero_green.png', speed: 4, jump: 8 },
+    { id: '4', name: 'Luna', sprite: 'hero_purple.png', speed: 7, jump: 7 }
   ]);
 
   useEffect(() => {

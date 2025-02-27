@@ -649,7 +649,7 @@ export default class MultiplayerPlatformer {
     // Define different NPC types with their properties
     this.npcTypes = [
       {
-        name: 'Goomba',
+        name: 'Crawler',
         geometry: new THREE.BoxGeometry(0.8, 0.6, 0.8),
         material: new THREE.MeshStandardMaterial({ 
           color: 0x8B4513,  // Brown
@@ -663,7 +663,7 @@ export default class MultiplayerPlatformer {
         crushable: true
       },
       {
-        name: 'Koopa',
+        name: 'Sentinel',
         geometry: new THREE.CylinderGeometry(0.4, 0.6, 1.0, 8),
         material: new THREE.MeshStandardMaterial({ 
           color: 0x00AA00,  // Green
@@ -677,7 +677,7 @@ export default class MultiplayerPlatformer {
         crushable: true
       },
       {
-        name: 'Spiny',
+        name: 'Spiker',
         geometry: new THREE.SphereGeometry(0.5, 16, 8),
         material: new THREE.MeshStandardMaterial({ 
           color: 0xDD2222,  // Red
@@ -691,7 +691,7 @@ export default class MultiplayerPlatformer {
         crushable: false // Can't be crushed by jumping
       },
       {
-        name: 'Paratroopa',
+        name: 'Glider',
         geometry: new THREE.ConeGeometry(0.5, 1.0, 8),
         material: new THREE.MeshStandardMaterial({ 
           color: 0x00AAAA,  // Teal
@@ -705,7 +705,7 @@ export default class MultiplayerPlatformer {
         crushable: true
       },
       {
-        name: 'Boo',
+        name: 'Phantom',
         geometry: new THREE.SphereGeometry(0.6, 16, 8),
         material: new THREE.MeshStandardMaterial({ 
           color: 0xFFFFFF,  // White
@@ -779,9 +779,9 @@ export default class MultiplayerPlatformer {
         const offset = j === 0 ? -0.2 : 0.2;
         
         // Position depends on the NPC type
-        if (npcType.name === 'Goomba') {
+        if (npcType.name === 'Crawler') {
           eye.position.set(offset, 0.15, 0.3);
-        } else if (npcType.name === 'Koopa' || npcType.name === 'Spiny') {
+        } else if (npcType.name === 'Sentinel' || npcType.name === 'Spiker') {
           eye.position.set(offset, 0.2, 0.3);
         } else {
           eye.position.set(offset, 0, 0.3);
@@ -799,8 +799,8 @@ export default class MultiplayerPlatformer {
       }
       
       // Add special features based on type
-      if (npcType.name === 'Goomba') {
-        // Add feet to Goomba
+      if (npcType.name === 'Crawler') {
+        // Add feet to Crawler
         const footGeometry = new THREE.BoxGeometry(0.3, 0.2, 0.3);
         const footMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
         
@@ -809,8 +809,8 @@ export default class MultiplayerPlatformer {
           foot.position.set(f === 0 ? 0.25 : -0.25, -0.3, 0);
           npc.add(foot);
         }
-      } else if (npcType.name === 'Spiny') {
-        // Add spikes to the Spiny
+      } else if (npcType.name === 'Spiker') {
+        // Add spikes to the Spiker
         const spikeGeometry = new THREE.ConeGeometry(0.08, 0.25, 4);
         const spikeMaterial = new THREE.MeshStandardMaterial({ color: 0xFF0000 });
         
@@ -826,8 +826,8 @@ export default class MultiplayerPlatformer {
           spike.rotation.y = angle;
           npc.add(spike);
         }
-      } else if (npcType.name === 'Paratroopa') {
-        // Add shell to Koopa/Paratroopa
+      } else if (npcType.name === 'Glider') {
+        // Add armor to Glider
         const shellGeometry = new THREE.SphereGeometry(0.4, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
         const shellMaterial = new THREE.MeshStandardMaterial({ color: 0xFFAA00 });
         const shell = new THREE.Mesh(shellGeometry, shellMaterial);
@@ -835,7 +835,7 @@ export default class MultiplayerPlatformer {
         shell.position.y = 0.2;
         npc.add(shell);
         
-        // Add wings to Paratroopa
+        // Add wings to Glider
         const wingGeometry = new THREE.PlaneGeometry(0.6, 0.4);
         const wingMaterial = new THREE.MeshBasicMaterial({ 
           color: 0xFFFFFF,
@@ -855,8 +855,8 @@ export default class MultiplayerPlatformer {
           if (!npc.userData.wings) npc.userData.wings = [];
           npc.userData.wings.push(wing);
         }
-      } else if (npcType.name === 'Boo') {
-        // Add "arms" to Boo
+      } else if (npcType.name === 'Phantom') {
+        // Add "arms" to Phantom
         const armGeometry = new THREE.CapsuleGeometry(0.15, 0.3, 4, 8);
         const armMaterial = new THREE.MeshStandardMaterial({ 
           color: 0xFFFFFF,
@@ -936,7 +936,7 @@ export default class MultiplayerPlatformer {
         fogColor: 0xADD8E6,     // Light blue
         fogNear: 30,
         fogFar: 100,
-        enemyTypes: ['Goomba', 'Koopa', 'Paratroopa']
+        enemyTypes: ['Crawler', 'Sentinel', 'Glider']
       },
       'desert': {
         groundColor: 0xF4A460,  // Sandy brown
@@ -947,7 +947,7 @@ export default class MultiplayerPlatformer {
         fogColor: 0xFFDAB9,     // Peach puff
         fogNear: 20,
         fogFar: 80,
-        enemyTypes: ['Spiny', 'Goomba', 'Boo']
+        enemyTypes: ['Spiker', 'Crawler', 'Phantom']
       },
       'snow': {
         groundColor: 0xFFFAFA,  // Snow
@@ -958,7 +958,7 @@ export default class MultiplayerPlatformer {
         fogColor: 0xF0FFFF,     // Azure
         fogNear: 15,
         fogFar: 50,
-        enemyTypes: ['Koopa', 'Boo', 'Spiny']
+        enemyTypes: ['Sentinel', 'Phantom', 'Spiker']
       },
       'lava': {
         groundColor: 0x8B0000,  // Dark red
@@ -968,7 +968,8 @@ export default class MultiplayerPlatformer {
         decorationColors: [0xFF0000, 0xFF6347, 0xFF4500], // Reds/oranges
         fogColor: 0xFF6347,     // Tomato
         fogNear: 10,
-        fogFar: 60
+        fogFar: 60,
+        enemyTypes: ['Glider', 'Spiker', 'Phantom']
       }
     };
     
