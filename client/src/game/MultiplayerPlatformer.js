@@ -126,6 +126,7 @@ export default class MultiplayerPlatformer {
     this.worldThemes = ['grassland', 'desert', 'snow', 'lava']; // Different world themes
     this.currentTheme = 'grassland';
     this.nextThemeChange = 500; // Distance until next theme change
+    this.themeChanged = false; // Flag to track theme transition animations
     
     // Define theme properties
     this.themeProperties = {
@@ -519,6 +520,20 @@ export default class MultiplayerPlatformer {
       const parallaxX = -this.playerMesh.position.x * layer.speed;
       layer.mesh.position.x = parallaxX;
       
+      // Also apply subtle z-movement for depth effect
+      const parallaxZ = layer.originalZ + (this.playerMesh.position.z * layer.speed * 0.5);
+      layer.mesh.position.z = parallaxZ;
+      
+      // Add slight y-movement for more dynamic effect
+      const timeOffset = Date.now() * 0.0001 * (1 - layer.speed); // Slower for far layers
+      const parallaxY = Math.sin(timeOffset) * layer.speed * 2;
+      
+      // Only apply subtle y movement to sky layers (first 3 layers)
+      const layerIndex = this.parallaxLayers.indexOf(layer);
+      if (layerIndex < 3) {
+        layer.mesh.position.y += parallaxY;
+      }
+      
       // Gradually change layer color when theme changes
       if (this.themeChanged) {
         this.updateLayerThemeColors(layer.mesh);
@@ -543,8 +558,24 @@ export default class MultiplayerPlatformer {
     
     const targetColor = new THREE.Color(themeColors[this.currentTheme][layerIndex] || 0xFFFFFF);
     
-    // Smoothly transition to new color
-    mesh.material.color.lerp(targetColor, 0.01);
+    // Smoothly transition to the target color
+    const currentColor = mesh.material.color;
+    const transitionSpeed = 0.05; // Adjust for faster/slower transitions
+    
+    // Interpolate RGB components
+    currentColor.r += (targetColor.r - currentColor.r) * transitionSpeed;
+    currentColor.g += (targetColor.g - currentColor.g) * transitionSpeed;
+    currentColor.b += (targetColor.b - currentColor.b) * transitionSpeed;
+    
+    // Check if we're close enough to target to consider transition complete
+    const colorDiff = Math.abs(currentColor.r - targetColor.r) + 
+                     Math.abs(currentColor.g - targetColor.g) + 
+                     Math.abs(currentColor.b - targetColor.b);
+                     
+    // Reset themeChanged flag when all colors are close enough
+    if (colorDiff < 0.05 && layerIndex === this.parallaxLayers.length - 1) {
+      this.themeChanged = false;
+    }
   }
 
   initLights() {

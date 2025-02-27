@@ -1,5 +1,11 @@
 import { Character } from './engine';
 
+export interface ParallaxLayer {
+  mesh: any;
+  speed: number;
+  originalZ: number;
+}
+
 export interface MultiplayerPlatformerInterface {
   isRunning: boolean;
   score: number;
@@ -12,6 +18,9 @@ export interface MultiplayerPlatformerInterface {
   characterData: Character | null;
   isAttacking: boolean;
   attackCooldown: number;
+  parallaxLayers: ParallaxLayer[];
+  themeChanged: boolean;
+  currentTheme: string;
   
   selectCharacter(character: Character): void;
   startGame(): void;
@@ -32,6 +41,11 @@ export interface MultiplayerPlatformerInterface {
   
   crushObstacle(obstacle: any): void;
   updateCrushableObstacles(): void;
+  
+  setupParallaxBackground(): void;
+  updateParallaxLayers(): void;
+  addTerrainShapeToLayer(layerMesh: any, layerIndex: number): void;
+  updateLayerThemeColors(mesh: any): void;
   
   showPlayerDamageEffect(): void;
   showEnemyAttackEffect(position: {x: number, y: number, z: number}): void;
