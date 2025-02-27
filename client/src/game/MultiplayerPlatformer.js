@@ -1759,18 +1759,20 @@ export default class MultiplayerPlatformer {
     
     // Check if attack boost is active
     const hasAttackBoost = this.activeEffects.attackBoost > 0;
-    const attackSize = hasAttackBoost ? 1.2 : 0.8; // Larger attack with boost
-    const attackRange = hasAttackBoost ? 1.8 : 1.2; // Longer range with boost
-    const attackDuration = hasAttackBoost ? 400 : 300; // Longer animation with boost
-    const attackCooldownTime = hasAttackBoost ? 15 : 20; // Shorter cooldown with boost
+    const attackSize = hasAttackBoost ? 1.8 : 1.2; // Increased attack size (was 1.2/0.8)
+    const attackRange = hasAttackBoost ? 2.5 : 1.8; // Increased attack range (was 1.8/1.2)
+    const attackDuration = hasAttackBoost ? 450 : 350; // Slightly longer animation
+    const attackCooldownTime = hasAttackBoost ? 12 : 18; // Reduced cooldown for better responsiveness
     
     // Create a visual effect for the attack (shockwave-like)
-    const attackGeometry = new THREE.RingGeometry(0.2, attackSize, 16);
+    const attackGeometry = new THREE.RingGeometry(0.3, attackSize, 24); // Increased precision and inner radius
     const attackMaterial = new THREE.MeshBasicMaterial({ 
       color: hasAttackBoost ? 0xFF0000 : playerColor, // Red for boosted attacks 
       transparent: true, 
-      opacity: 0.7,
-      side: THREE.DoubleSide
+      opacity: 0.8, // Increased opacity for better visibility
+      side: THREE.DoubleSide,
+      emissive: hasAttackBoost ? 0xFF0000 : playerColor,
+      emissiveIntensity: 0.5
     });
     const attackMesh = new THREE.Mesh(attackGeometry, attackMaterial);
     
@@ -1880,19 +1882,56 @@ export default class MultiplayerPlatformer {
   checkAttackCollisions(attackMesh) {
     if (!this.playerMesh) return;
     
+    // Create an expanded attack box with larger hit radius
     const attackBox = new THREE.Box3().setFromObject(attackMesh);
+    attackBox.expandByScalar(1.2); // Significantly increase hit radius for better combat feel
     
+    // Get attack position for distance-based detection
+    const attackPosition = new THREE.Vector3();
+    attackMesh.getWorldPosition(attackPosition);
+    
+    // Check for hits on crushable obstacles
     for (const obstacle of this.crushableObstacles) {
       if (obstacle.userData.isCrushed) continue;
       
+      // Get obstacle position
+      const obstaclePosition = new THREE.Vector3();
+      obstacle.getWorldPosition(obstaclePosition);
+      
+      // Calculate distance between attack and obstacle
+      const distance = attackPosition.distanceTo(obstaclePosition);
+      
+      // Create obstacle box
       const obstacleBox = new THREE.Box3().setFromObject(obstacle);
       
-      if (attackBox.intersectsBox(obstacleBox)) {
+      // Check if attack intersects with obstacle or is within attack radius
+      if (attackBox.intersectsBox(obstacleBox) || distance < 2.5) { // Added distance-based check (2.5 units)
         console.log('Attack hit obstacle:', obstacle.userData.id);
+        
+        // Create impact effect at hit position
+        this.createHitImpactEffect(obstaclePosition);
+        
+        // Process the hit
         this.crushObstacle(obstacle);
+        
+        // Add hit feedback with screen shake
+        if (this.camera && Math.random() < 0.7) {
+          const originalPosition = this.camera.position.clone();
+          const shakeAmount = 0.08;
+          this.camera.position.x += (Math.random() - 0.5) * shakeAmount;
+          this.camera.position.y += (Math.random() - 0.5) * shakeAmount;
+          
+          // Reset camera position after a short delay
+          setTimeout(() => {
+            this.camera.position.copy(originalPosition);
+          }, 100);
+        }
         
         // Increase score
         this.score += 100;
+        
+        // Create floating score popup
+        this.createScorePopup(obstaclePosition, 100);
         
         // Tell other players about the crushed obstacle
         this.socket.emit('obstacleUpdate', {
@@ -1901,6 +1940,87 @@ export default class MultiplayerPlatformer {
         });
       }
     }
+  }
+  
+  // Helper method to create hit impact effect
+  createHitImpactEffect(position) {
+    // Create a flash at impact point
+    const impactGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+    const impactMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xFFFF00, 
+      transparent: true, 
+      opacity: 0.7
+    });
+    const impactMesh = new THREE.Mesh(impactGeometry, impactMaterial);
+    impactMesh.position.copy(position);
+    this.scene.add(impactMesh);
+    
+    // Add particles for the impact
+    const particleCount = 20;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0xFFAA00,
+      size: 0.1,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      positions[i3] = position.x;
+      positions[i3 + 1] = position.y;
+      positions[i3 + 2] = position.z;
+      
+      // Random velocity in all directions
+      velocities.push({
+        x: (Math.random() - 0.5) * 0.2,
+        y: Math.random() * 0.2,
+        z: (Math.random() - 0.5) * 0.2
+      });
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.scene.add(particles);
+    
+    // Animate particles outward
+    let frame = 0;
+    const animateImpact = () => {
+      frame++;
+      
+      // Update particle positions
+      const positions = particles.geometry.attributes.position.array;
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        positions[i3] += velocities[i].x;
+        positions[i3 + 1] += velocities[i].y;
+        positions[i3 + 2] += velocities[i].z;
+        
+        // Apply gravity to y velocity
+        velocities[i].y -= 0.01;
+      }
+      particles.geometry.attributes.position.needsUpdate = true;
+      
+      // Shrink impact flash
+      impactMesh.scale.multiplyScalar(0.9);
+      impactMesh.material.opacity *= 0.9;
+      
+      if (frame < 20) {
+        requestAnimationFrame(animateImpact);
+      } else {
+        this.scene.remove(impactMesh);
+        this.scene.remove(particles);
+      }
+    };
+    
+    // Start animation
+    animateImpact();
+    
+    // Play hit sound
+    this.playSound('hit');
   }
   
   handleResize() {
@@ -3213,20 +3333,32 @@ export default class MultiplayerPlatformer {
   checkDecorationCollisions() {
     if (!this.playerMesh || !this.isRunning) return;
     
+    // Create player collision box with increased radius for better hit detection
     const playerBox = new THREE.Box3().setFromObject(this.playerMesh);
-    // Slightly reduce the player collision box to allow for some forgiveness
-    playerBox.min.add(new THREE.Vector3(0.1, 0, 0.1));
-    playerBox.max.sub(new THREE.Vector3(0.1, 0, 0.1));
+    // Expand the player collision box to increase hit radius
+    playerBox.expandByScalar(0.5); // Increase collision radius by 0.5 units
+    
+    // Get player position for distance-based collisions
+    const playerPosition = new THREE.Vector3();
+    this.playerMesh.getWorldPosition(playerPosition);
     
     // Check collisions with all decorations (trees, rocks, etc.)
     for (const decoration of this.decorations) {
       if (!decoration.userData.isCollidable) continue;
       
-      // Create a bounding box for the decoration
-      const decorationBox = new THREE.Box3().setFromObject(decoration);
+      // Get decoration position
+      const decorationPosition = new THREE.Vector3();
+      decoration.getWorldPosition(decorationPosition);
       
-      // Check if player intersects with decoration
-      if (playerBox.intersectsBox(decorationBox)) {
+      // Calculate distance between player and decoration
+      const distance = playerPosition.distanceTo(decorationPosition);
+      
+      // Create a bounding box for the decoration with expanded radius
+      const decorationBox = new THREE.Box3().setFromObject(decoration);
+      decorationBox.expandByScalar(0.3); // Increase decoration collision radius
+      
+      // Check if player intersects with decoration or is within proximity radius
+      if (playerBox.intersectsBox(decorationBox) || distance < 2.0) { // Added distance-based check (2.0 units)
         // Calculate the center of both objects to determine push direction
         const playerCenter = new THREE.Vector3();
         playerBox.getCenter(playerCenter);
@@ -3238,11 +3370,30 @@ export default class MultiplayerPlatformer {
         const pushDirection = new THREE.Vector3();
         pushDirection.subVectors(playerCenter, decorationCenter).normalize();
         
-        // Push player away from decoration (only in X and Z directions)
-        this.playerMesh.position.x += pushDirection.x * 0.2;
-        this.playerMesh.position.z += pushDirection.z * 0.2;
+        // Push player away from decoration with stronger force
+        const pushForce = 0.35; // Increased from 0.2
+        this.playerMesh.position.x += pushDirection.x * pushForce;
+        this.playerMesh.position.z += pushDirection.z * pushForce;
         
-        // Log the collision for debugging
+        // Apply some vertical force to make collision feel more impactful
+        if (this.isOnGround && !this.isJumping && Math.random() < 0.3) {
+          this.velocity.y = 3; // Small bounce effect (occasional)
+        }
+        
+        // Add slight camera shake for impact feedback
+        if (this.camera && Math.random() < 0.5) {
+          const originalPosition = this.camera.position.clone();
+          const shakeAmount = 0.05;
+          this.camera.position.x += (Math.random() - 0.5) * shakeAmount;
+          this.camera.position.y += (Math.random() - 0.5) * shakeAmount;
+          
+          // Reset camera position after a short delay
+          setTimeout(() => {
+            this.camera.position.copy(originalPosition);
+          }, 100);
+        }
+        
+        // Log the collision for debugging and prevent spam
         if (!decoration.userData.lastCollisionTime || 
             Date.now() - decoration.userData.lastCollisionTime > 1000) {
           console.log(`Collision with ${decoration.userData.type} decoration!`);
@@ -3257,7 +3408,7 @@ export default class MultiplayerPlatformer {
           // Tell server about the collision
           if (this.socket) {
             this.socket.emit('decorationCollision', {
-              decorationId: decoration.userData.decorationId,
+              decorationId: decoration.userData.id || decoration.userData.decorationId,
               position: decoration.position,
               type: decoration.userData.type
             });
