@@ -70,73 +70,80 @@ export default function MultiplayerGameContainer() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-b from-blue-400 to-blue-600">
-      <h1 className="game-title mb-6">Mario Multiplayer Adventure</h1>
-      
+    <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-b from-blue-400 to-blue-600">
+      {/* Character selection modal */}
       {!isGameStarted && (
-        <Card className="w-full max-w-md p-6 mb-8 bg-white bg-opacity-90 shadow-xl rounded-xl">
-          <h2 className="text-2xl font-bold text-center mb-4">Choose Your Character</h2>
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            {characters.map(character => (
-              <Button
-                key={character.id}
-                onClick={() => selectCharacter(character)}
-                className={`h-16 ${selectedCharacter?.id === character.id ? 'bg-green-500 border-2 border-white' : 'bg-blue-500'}`}
-              >
-                {character.name}
-              </Button>
-            ))}
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-black bg-opacity-50">
+          <Card className="w-full max-w-md p-6 bg-white bg-opacity-90 shadow-xl rounded-xl">
+            <h2 className="text-2xl font-bold text-center mb-4">Choose Your Character</h2>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {characters.map(character => (
+                <Button
+                  key={character.id}
+                  onClick={() => selectCharacter(character)}
+                  className={`h-16 ${selectedCharacter?.id === character.id ? 'bg-green-500 border-2 border-white' : 'bg-blue-500'}`}
+                >
+                  {character.name}
+                </Button>
+              ))}
+            </div>
+            
+            <Button 
+              onClick={startGame} 
+              className="w-full h-12 bg-red-500 hover:bg-red-600 text-white font-bold"
+              disabled={!selectedCharacter}
+            >
+              Start Game
+            </Button>
+          </Card>
+        </div>
+      )}
+      
+      {/* Side UI Panel */}
+      {isGameStarted && (
+        <div className="absolute top-0 right-0 bg-black bg-opacity-70 text-white p-4 rounded-bl-lg z-10 max-w-xs">
+          <div className="mb-4">
+            <h3 className="text-xl font-bold mb-2 text-center border-b border-white pb-1">Game Stats</h3>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              <div>Score:</div><div className="font-semibold">{score}</div>
+              <div>Lives:</div><div className="font-semibold">{lives}</div>
+              <div>Enemies:</div><div className="font-semibold">{gameRef.current?.crushableObstacles?.length || 0}</div>
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <h3 className="text-xl font-bold mb-2 text-center border-b border-white pb-1">Controls</h3>
+            <ul className="text-sm space-y-1">
+              <li><span className="font-semibold">Move:</span> Arrow Keys / WASD</li>
+              <li><span className="font-semibold">Jump:</span> Space Bar</li>
+              <li><span className="font-semibold">Attack:</span> F, E, or X Key</li>
+            </ul>
+          </div>
+          
+          <div className="mb-4">
+            <h3 className="text-xl font-bold mb-2 text-center border-b border-white pb-1">Tips</h3>
+            <ul className="text-sm space-y-1">
+              <li>Collect coins for +10 points</li>
+              <li>Crush enemies for +50 points</li>
+              <li>Attack enemies for +100 points</li>
+              <li>Power-ups give special abilities!</li>
+            </ul>
           </div>
           
           <Button 
-            onClick={startGame} 
-            className="w-full h-12 bg-red-500 hover:bg-red-600 text-white font-bold"
-            disabled={!selectedCharacter}
+            onClick={restartGame} 
+            className="w-full mt-2 bg-red-500 hover:bg-red-600"
           >
-            Start Game
+            Restart Game
           </Button>
-        </Card>
+        </div>
       )}
       
+      {/* Full-screen Game Container */}
       <div 
         ref={containerRef} 
-        className="game-container relative w-full max-w-6xl aspect-video rounded-lg overflow-hidden shadow-2xl"
-      >
-        {/* Game UI overlay */}
-        {isGameStarted && (
-          <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white p-2 rounded z-10">
-            <div>Score: {score}</div>
-            <div>Lives: {lives}</div>
-            <div>Enemies: {gameRef.current?.crushableObstacles?.length || 0}</div>
-            {/* Player count is now managed by the game engine's built-in UI */}
-          </div>
-        )}
-        
-        {/* Game restart button */}
-        {isGameStarted && (
-          <Button
-            onClick={restartGame}
-            className="absolute top-4 right-4 bg-red-500 hover:bg-red-600 text-white z-10"
-          >
-            Restart
-          </Button>
-        )}
-      </div>
-      
-      {/* Game controls info */}
-      <div className="mt-6 p-4 bg-black bg-opacity-75 text-white rounded-lg max-w-md">
-        <h3 className="font-bold mb-2">Controls:</h3>
-        <ul className="list-disc pl-5">
-          <li>Movement: Arrow Keys or WASD</li>
-          <li>Jump: Space Bar</li>
-          <li>Attack: F, E, or X Key (+100 points)</li>
-          <li>Collect coins to increase your score! (+10 points)</li>
-          <li>Jump on enemies to crush them! (+50 points)</li>
-          <li>Attack enemies from the front with your special move!</li>
-          <li>Avoid enemies from the sides or you'll lose a life!</li>
-          <li>Play with friends - obstacles crushed by one player are crushed for everyone!</li>
-        </ul>
-      </div>
+        className="game-container w-full h-full"
+      />
     </div>
   );
 }
