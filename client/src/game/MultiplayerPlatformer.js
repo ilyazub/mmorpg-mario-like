@@ -10,6 +10,7 @@ export default class MultiplayerPlatformer {
     this.players = new Map(); // Store other players
     this.obstacles = []; // Store obstacles
     this.crushableObstacles = []; // Store crushable obstacles
+    this.coins = []; // Store collectible coins
     
     // Socket.io connection
     this.socket = io();
@@ -24,6 +25,7 @@ export default class MultiplayerPlatformer {
     // Setup scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
+    this.scene.fog = new THREE.Fog(0x87CEEB, 30, 100); // Add fog for distant objects
     
     // Setup camera
     this.camera = new THREE.PerspectiveCamera(
@@ -43,6 +45,69 @@ export default class MultiplayerPlatformer {
     this.isAttacking = false;
     this.attackCooldown = 0;
     
+    // Procedural world generation parameters
+    this.worldSections = [];
+    this.currentSection = 0;
+    this.sectionSize = 40; // Size of each world section
+    this.worldLength = 300; // How far ahead to generate
+    this.generatedZ = 0; // How far we've generated so far
+    this.respawnDistance = -50; // Distance behind player to respawn objects
+    this.distanceTraveled = 0; // Total distance traveled
+    this.npcRespawnPool = []; // Pool of NPCs to be respawned
+    this.coinRespawnPool = []; // Pool of coins to be respawned
+    this.platforms = [];      // All platforms in the world
+    this.groundSegments = []; // Ground segments
+    this.decorations = [];    // Decorative elements
+    
+    // World themes and properties
+    this.worldThemes = ['grassland', 'desert', 'snow', 'lava']; // Different world themes
+    this.currentTheme = 'grassland';
+    this.nextThemeChange = 500; // Distance until next theme change
+    
+    // Define theme properties
+    this.themeProperties = {
+      grassland: {
+        skyColor: 0x87CEEB,
+        fogColor: 0x87CEEB,
+        fogNear: 30,
+        fogFar: 100,
+        groundColor: 0x32CD32, // Lime green
+        platformColors: [0x8B4513, 0xA52A2A, 0xCD853F], // Brown variations
+        decorationColors: [0x228B22, 0x006400, 0x008000], // Green variations
+        enemyTypes: ['Goomba', 'Koopa', 'Paratroopa']
+      },
+      desert: {
+        skyColor: 0xFFD700,
+        fogColor: 0xFFE4B5,
+        fogNear: 25,
+        fogFar: 80,
+        groundColor: 0xDEB887, // Burlywood
+        platformColors: [0xD2B48C, 0xF4A460, 0xDAA520], // Tan/sand variations
+        decorationColors: [0xCD853F, 0xB8860B, 0x8B4513], // Desert plant colors
+        enemyTypes: ['Spiny', 'Goomba', 'Boo']
+      },
+      snow: {
+        skyColor: 0xE0FFFF,
+        fogColor: 0xE0FFFF,
+        fogNear: 20,
+        fogFar: 70,
+        groundColor: 0xFFFAFA, // Snow white
+        platformColors: [0xB0C4DE, 0xADD8E6, 0x87CEEB], // Light blue variations
+        decorationColors: [0xFFFFFF, 0xF0F8FF, 0xE6E6FA], // White/light variations
+        enemyTypes: ['Koopa', 'Boo', 'Spiny']
+      },
+      lava: {
+        skyColor: 0x800000,
+        fogColor: 0xFF4500,
+        fogNear: 15,
+        fogFar: 60,
+        groundColor: 0x8B0000, // Dark red
+        platformColors: [0xA52A2A, 0x800000, 0x8B0000], // Red/brown variations
+        decorationColors: [0xFF4500, 0xFF6347, 0xFF7F50], // Orange/fire variations
+        enemyTypes: ['Spiny', 'Boo', 'Paratroopa']
+      }
+    }
+    
     // Controls state
     this.keys = {
       forward: false,
@@ -60,9 +125,7 @@ export default class MultiplayerPlatformer {
     
     // Initialize game elements
     this.initLights();
-    this.initWorld();
-    this.initObstacles();
-    this.initCrushableObstacles();
+    this.initWorld(); // This will now set up our procedural world
     
     // Start animation loop
     this.lastUpdateTime = Date.now();
@@ -542,76 +605,714 @@ export default class MultiplayerPlatformer {
   }
   
   initWorld() {
-    // Create ground
-    const groundGeometry = new THREE.BoxGeometry(100, 1, 100);
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x8B4513,
-      roughness: 1,
-      metalness: 0
-    });
-    this.ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    this.ground.position.y = -0.5; // Place it below the player
-    this.ground.receiveShadow = true;
-    this.scene.add(this.ground);
+    console.log('Initializing procedural world...');
     
-    // Create platforms
-    const platformPositions = [
-      { x: 0, y: 3, z: -5, width: 3, height: 0.5, depth: 3 },
-      { x: 5, y: 1, z: 3, width: 2, height: 0.5, depth: 2 },
-      { x: -5, y: 2, z: 3, width: 2, height: 0.5, depth: 2 },
-      { x: 0, y: 5, z: -10, width: 2, height: 0.5, depth: 2 }
-    ];
+    // Update theme properties - leave existing ones, but enhance them with updated fields
+    this.themeProperties = {
+      'grassland': {
+        groundColor: 0x7CFC00,  // Lawn green
+        platformColors: [0x8B4513, 0xA52A2A, 0xCD853F], // Brown variations
+        obstacleColor: 0x8B4513, // Brown
+        skyColor: 0x87CEEB,     // Sky blue
+        decorationColors: [0x228B22, 0x32CD32, 0x006400], // Forest greens
+        fogColor: 0xADD8E6,     // Light blue
+        fogNear: 30,
+        fogFar: 100,
+        enemyTypes: ['Goomba', 'Koopa', 'Paratroopa']
+      },
+      'desert': {
+        groundColor: 0xF4A460,  // Sandy brown
+        platformColors: [0xD2B48C, 0xF4A460, 0xDAA520], // Tan/sand variations
+        obstacleColor: 0xCD853F, // Peru
+        skyColor: 0xFFA07A,     // Light salmon
+        decorationColors: [0xDAA520, 0xB8860B, 0xCD853F], // Golden/bronze tones
+        fogColor: 0xFFDAB9,     // Peach puff
+        fogNear: 20,
+        fogFar: 80,
+        enemyTypes: ['Spiny', 'Goomba', 'Boo']
+      },
+      'snow': {
+        groundColor: 0xFFFAFA,  // Snow
+        platformColors: [0xB0C4DE, 0xADD8E6, 0x87CEEB], // Light blue variations
+        obstacleColor: 0xB0C4DE, // Light steel blue
+        skyColor: 0xF0F8FF,     // Alice blue
+        decorationColors: [0xB0E0E6, 0xADD8E6, 0x87CEEB], // Powder/sky blues
+        fogColor: 0xF0FFFF,     // Azure
+        fogNear: 15,
+        fogFar: 50,
+        enemyTypes: ['Koopa', 'Boo', 'Spiny']
+      },
+      'lava': {
+        groundColor: 0x8B0000,  // Dark red
+        platformColors: [0xA52A2A, 0x800000, 0x8B0000], // Red/brown variations
+        obstacleColor: 0x800000, // Maroon
+        skyColor: 0xFF4500,     // Orange red
+        decorationColors: [0xFF0000, 0xFF6347, 0xFF4500], // Reds/oranges
+        fogColor: 0xFF6347,     // Tomato
+        fogNear: 10,
+        fogFar: 60
+      }
+    };
     
+    // Initialize base structures for the world
     this.platforms = [];
+    this.decorations = [];
     
-    platformPositions.forEach(platform => {
-      const geometry = new THREE.BoxGeometry(platform.width, platform.height, platform.depth);
-      const material = new THREE.MeshStandardMaterial({ 
-        color: 0x4CAF50,
-        roughness: 0.8,
-        metalness: 0.2
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(platform.x, platform.y, platform.z);
-      mesh.receiveShadow = true;
-      mesh.castShadow = true;
-      
-      this.platforms.push(mesh);
-      this.scene.add(mesh);
-    });
+    // Create ground segments (we'll use multiple ground segments for endless runner effect)
+    this.groundSegments = [];
     
-    // Create collectible coins
+    // Create the initial world sections
+    this.generateInitialWorld();
+    
+    // Initialize enemy and coin spawning
+    this.initCrushableObstacles();
     this.createCoins();
   }
   
-  createCoins() {
-    const coinPositions = [
-      { x: 0, y: 1, z: -5 },
-      { x: 5, y: 2, z: 3 },
-      { x: -5, y: 3, z: 3 },
-      { x: 0, y: 6, z: -10 }
-    ];
+  generateInitialWorld() {
+    const currentTheme = this.themeProperties[this.currentTheme];
     
-    this.coins = [];
+    // Set scene fog and background based on theme
+    this.scene.background = new THREE.Color(currentTheme.skyColor);
+    this.scene.fog = new THREE.Fog(currentTheme.fogColor, currentTheme.fogNear, currentTheme.fogFar);
     
-    coinPositions.forEach(pos => {
+    // Generate ground segments
+    const groundWidth = 50; // Width of each ground segment
+    const groundDepth = 200; // Length of ground extending forward
+    
+    // Create multiple ground segments for the "endless" effect
+    for (let z = 0; z > -groundDepth; z -= 50) {
+      const groundGeometry = new THREE.BoxGeometry(groundWidth, 1, 50);
+      const groundMaterial = new THREE.MeshStandardMaterial({ 
+        color: currentTheme.groundColor,
+        roughness: 0.8,
+        metalness: 0.2
+      });
+      
+      const groundSegment = new THREE.Mesh(groundGeometry, groundMaterial);
+      groundSegment.position.set(0, -0.5, z - 25); // Center the segment
+      groundSegment.receiveShadow = true;
+      
+      // Assign segment data for recycling later
+      groundSegment.userData = {
+        segmentType: 'ground',
+        zIndex: z,
+      };
+      
+      this.groundSegments.push(groundSegment);
+      this.scene.add(groundSegment);
+      
+      // Track the furthest point we've generated
+      this.generatedZ = Math.min(this.generatedZ, z - 50);
+    }
+    
+    // Generate initial platforms - spread out along the path
+    const platformCount = 10;
+    for (let i = 0; i < platformCount; i++) {
+      this.generatePlatform(-(i * 20) - 10); // Stagger platforms with increasing distance
+    }
+    
+    // Generate decorative elements
+    this.generateDecorations();
+  }
+  
+  generatePlatform(z) {
+    const currentTheme = this.themeProperties[this.currentTheme];
+    
+    // Generate platform with random properties
+    const width = 2 + Math.random() * 3;
+    const height = 0.5;
+    const depth = 2 + Math.random() * 3;
+    
+    // Random position - keep platforms accessible but varied
+    const x = (Math.random() - 0.5) * 20;
+    const y = 1 + Math.random() * 5;
+    
+    const geometry = new THREE.BoxGeometry(width, height, depth);
+    const material = new THREE.MeshStandardMaterial({ 
+      color: currentTheme.platformColor,
+      roughness: 0.7,
+      metalness: 0.3
+    });
+    
+    const platform = new THREE.Mesh(geometry, material);
+    platform.position.set(x, y, z);
+    platform.receiveShadow = true;
+    platform.castShadow = true;
+    
+    // Store platform data for recycling
+    platform.userData = {
+      segmentType: 'platform',
+      zPosition: z,
+      originalY: y,
+      movingPlatform: Math.random() > 0.6, // 40% chance to be a moving platform
+      movementAmplitude: Math.random() * 1.5,
+      movementFrequency: 0.02 + Math.random() * 0.02,
+      movementPhase: Math.random() * Math.PI * 2,
+      movementAxis: Math.random() > 0.5 ? 'x' : 'y' // Move horizontally or vertically
+    };
+    
+    this.platforms.push(platform);
+    this.scene.add(platform);
+    
+    // Add coins on top of some platforms
+    if (Math.random() > 0.3) { // 70% chance to add coins
+      this.generateCoinsForPlatform(platform);
+    }
+    
+    // Add obstacles on some platforms
+    if (Math.random() > 0.6) { // 40% chance to add an NPC
+      this.generateNPCForPlatform(platform);
+    }
+    
+    return platform;
+  }
+  
+  generateDecorations() {
+    const currentTheme = this.themeProperties[this.currentTheme];
+    
+    // Clear old decorations
+    this.decorations.forEach(decoration => {
+      this.scene.remove(decoration);
+    });
+    this.decorations = [];
+    
+    // Generate new decorations based on theme
+    const decorationCount = 30;
+    
+    for (let i = 0; i < decorationCount; i++) {
+      // Random position - spread throughout the visible area
+      const x = (Math.random() - 0.5) * 40;
+      const z = -(Math.random() * 100);
+      
+      let geometry, material, decoration;
+      
+      // Different decoration types based on theme
+      switch(this.currentTheme) {
+        case 'grassland':
+          // Trees
+          if (Math.random() > 0.5) {
+            // Tree trunk
+            geometry = new THREE.CylinderGeometry(0.3, 0.5, 2 + Math.random() * 2, 6);
+            material = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            decoration = new THREE.Mesh(geometry, material);
+            
+            // Tree top (leaves)
+            const leavesGeometry = new THREE.ConeGeometry(1 + Math.random() * 0.5, 2 + Math.random() * 1, 8);
+            const leavesColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+            const leavesMaterial = new THREE.MeshStandardMaterial({ color: leavesColor });
+            const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+            leaves.position.y = decoration.geometry.parameters.height / 2 + leavesGeometry.parameters.height / 2 - 0.3;
+            decoration.add(leaves);
+          } else {
+            // Bush
+            geometry = new THREE.SphereGeometry(0.5 + Math.random() * 0.5, 8, 8);
+            const bushColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+            material = new THREE.MeshStandardMaterial({ color: bushColor });
+            decoration = new THREE.Mesh(geometry, material);
+          }
+          break;
+          
+        case 'desert':
+          // Cactus or rock
+          if (Math.random() > 0.5) {
+            // Cactus
+            geometry = new THREE.CylinderGeometry(0.3, 0.4, 1 + Math.random() * 2, 8);
+            material = new THREE.MeshStandardMaterial({ color: 0x2E8B57 });
+            decoration = new THREE.Mesh(geometry, material);
+            
+            // Cactus arms
+            if (Math.random() > 0.5) {
+              const armGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.8, 8);
+              const arm = new THREE.Mesh(armGeometry, material);
+              arm.rotation.z = Math.PI / 2;
+              arm.position.set(0.5, decoration.geometry.parameters.height * 0.3, 0);
+              decoration.add(arm);
+            }
+          } else {
+            // Rock
+            geometry = new THREE.DodecahedronGeometry(0.6 + Math.random() * 0.4, 0);
+            const rockColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+            material = new THREE.MeshStandardMaterial({ color: rockColor });
+            decoration = new THREE.Mesh(geometry, material);
+          }
+          break;
+          
+        case 'snow':
+          // Snowman or ice crystal
+          if (Math.random() > 0.5) {
+            // Snowman
+            decoration = new THREE.Group();
+            
+            // Bottom sphere
+            const bottomGeometry = new THREE.SphereGeometry(0.7, 12, 12);
+            const snowMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
+            const bottom = new THREE.Mesh(bottomGeometry, snowMaterial);
+            decoration.add(bottom);
+            
+            // Middle sphere
+            const middleGeometry = new THREE.SphereGeometry(0.5, 12, 12);
+            const middle = new THREE.Mesh(middleGeometry, snowMaterial);
+            middle.position.y = 0.9;
+            decoration.add(middle);
+            
+            // Top sphere (head)
+            const topGeometry = new THREE.SphereGeometry(0.3, 12, 12);
+            const top = new THREE.Mesh(topGeometry, snowMaterial);
+            top.position.y = 1.6;
+            decoration.add(top);
+          } else {
+            // Ice crystal
+            geometry = new THREE.OctahedronGeometry(0.6 + Math.random() * 0.4, 0);
+            const crystalColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+            material = new THREE.MeshStandardMaterial({ 
+              color: crystalColor, 
+              transparent: true, 
+              opacity: 0.8 
+            });
+            decoration = new THREE.Mesh(geometry, material);
+          }
+          break;
+        
+        case 'lava':
+          // Volcanic rock or lava fountain
+          if (Math.random() > 0.5) {
+            // Volcanic rock
+            geometry = new THREE.DodecahedronGeometry(0.6 + Math.random() * 0.5, 1);
+            material = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            decoration = new THREE.Mesh(geometry, material);
+          } else {
+            // Lava fountain/pool
+            geometry = new THREE.CylinderGeometry(0.5 + Math.random() * 0.3, 0.7 + Math.random() * 0.3, 0.2, 12);
+            const lavaColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+            material = new THREE.MeshStandardMaterial({ 
+              color: lavaColor, 
+              emissive: lavaColor,
+              emissiveIntensity: 0.5
+            });
+            decoration = new THREE.Mesh(geometry, material);
+          }
+          break;
+          
+        default:
+          // Default decoration (simple cylinder)
+          geometry = new THREE.CylinderGeometry(0.3, 0.3, 1 + Math.random(), 8);
+          material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+          decoration = new THREE.Mesh(geometry, material);
+      }
+      
+      decoration.position.set(x, 0, z);
+      decoration.castShadow = true;
+      decoration.receiveShadow = true;
+      
+      // Store decoration data
+      decoration.userData = {
+        segmentType: 'decoration',
+        zPosition: z
+      };
+      
+      this.decorations.push(decoration);
+      this.scene.add(decoration);
+    }
+  }
+  
+  generateCoinsForPlatform(platform) {
+    // Get platform dimensions and position
+    const platformWidth = platform.geometry.parameters.width;
+    const platformDepth = platform.geometry.parameters.depth;
+    const platformX = platform.position.x;
+    const platformY = platform.position.y;
+    const platformZ = platform.position.z;
+    
+    // Determine number of coins to create
+    const coinCount = 1 + Math.floor(Math.random() * 3); // 1-3 coins
+    
+    for (let i = 0; i < coinCount; i++) {
+      // Position relative to platform
+      let x, z;
+      
+      if (coinCount === 1) {
+        // Single coin in the center
+        x = platformX;
+        z = platformZ;
+      } else {
+        // Multiple coins in a row or pattern
+        x = platformX + ((i / (coinCount - 1)) - 0.5) * (platformWidth * 0.7);
+        z = platformZ;
+      }
+      
+      // Create coin
       const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
       const material = new THREE.MeshStandardMaterial({ 
-        color: 0xFFD700,
+        color: 0xFFD700, // Gold
         metalness: 1,
         roughness: 0.3,
         emissive: 0x665000,
         emissiveIntensity: 0.5
       });
+      
       const coin = new THREE.Mesh(geometry, material);
       coin.rotation.x = Math.PI / 2; // Make it flat
-      coin.position.set(pos.x, pos.y, pos.z);
+      coin.position.set(x, platformY + 0.5, z); // Position above platform
       coin.castShadow = true;
-      coin.userData.isCollected = false;
+      
+      // Store coin data
+      coin.userData = {
+        segmentType: 'coin',
+        isCollected: false,
+        zPosition: z,
+        rotationSpeed: 0.02 + Math.random() * 0.02
+      };
       
       this.coins.push(coin);
       this.scene.add(coin);
+    }
+  }
+  
+  generateNPCForPlatform(platform) {
+    // Get platform position
+    const platformX = platform.position.x;
+    const platformY = platform.position.y;
+    const platformZ = platform.position.z;
+    
+    // Make sure we have NPC types defined
+    if (!this.npcTypes || !this.npcTypes.length) {
+      // Define NPC types if not already defined
+      this.npcTypes = [
+        {
+          name: 'Goomba',
+          geometry: new THREE.BoxGeometry(0.8, 0.6, 0.8),
+          material: new THREE.MeshStandardMaterial({ 
+            color: 0x8B4513,  // Brown
+            roughness: 0.7,
+            metalness: 0.2
+          }),
+          speed: 0.03,
+          movementStyle: 'ground',
+          jumpHeight: 0,
+          strength: 1,
+          crushable: true
+        },
+        {
+          name: 'Koopa',
+          geometry: new THREE.CylinderGeometry(0.4, 0.6, 1.0, 8),
+          material: new THREE.MeshStandardMaterial({ 
+            color: 0x00AA00,  // Green
+            roughness: 0.7,
+            metalness: 0.2
+          }),
+          speed: 0.02,
+          movementStyle: 'ground',
+          jumpHeight: 0,
+          strength: 1,
+          crushable: true
+        },
+        {
+          name: 'Spiny',
+          geometry: new THREE.SphereGeometry(0.5, 16, 8),
+          material: new THREE.MeshStandardMaterial({ 
+            color: 0xDD2222,  // Red
+            roughness: 0.6,
+            metalness: 0.3
+          }),
+          speed: 0.04,
+          movementStyle: 'ground',
+          jumpHeight: 0,
+          strength: 2,
+          crushable: false
+        },
+        {
+          name: 'Paratroopa',
+          geometry: new THREE.CylinderGeometry(0.4, 0.6, 1.0, 8),
+          material: new THREE.MeshStandardMaterial({ 
+            color: 0xFF2222,  // Red
+            roughness: 0.7,
+            metalness: 0.2
+          }),
+          speed: 0.03,
+          movementStyle: 'flying',
+          jumpHeight: 0.5,
+          strength: 1,
+          crushable: true
+        },
+        {
+          name: 'Boo',
+          geometry: new THREE.SphereGeometry(0.5, 16, 16),
+          material: new THREE.MeshStandardMaterial({ 
+            color: 0xFFFFFF,  // White
+            roughness: 0.3,
+            metalness: 0.1,
+            transparent: true,
+            opacity: 0.7
+          }),
+          speed: 0.02,
+          movementStyle: 'ghost',
+          jumpHeight: 0.2,
+          strength: 1,
+          crushable: true
+        }
+      ];
+    }
+    
+    // Select random NPC type
+    const npcType = this.npcTypes[Math.floor(Math.random() * this.npcTypes.length)];
+    
+    // Create the NPC mesh
+    const npc = new THREE.Mesh(npcType.geometry, npcType.material.clone());
+    
+    // Set height based on movement style
+    let y = platformY + 0.6; // Default above platform
+    if (npcType.movementStyle === 'flying') {
+      y = platformY + 1.5; // Flying enemies are higher
+    } else if (npcType.movementStyle === 'ghost') {
+      y = platformY + 1.0; // Ghosts float at medium height
+    }
+    
+    npc.position.set(platformX, y, platformZ);
+    npc.castShadow = true;
+    npc.receiveShadow = true;
+    
+    // Create eyes for all NPCs - same code as in initCrushableObstacles
+    const eyeGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+    const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    
+    // Create two eyes
+    for (let j = 0; j < 2; j++) {
+      const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+      const offset = j === 0 ? -0.2 : 0.2;
+      
+      // Position depends on the NPC type
+      if (npcType.name === 'Goomba') {
+        eye.position.set(offset, 0.15, 0.3);
+      } else if (npcType.name === 'Koopa' || npcType.name === 'Spiny') {
+        eye.position.set(offset, 0.2, 0.3);
+      } else {
+        eye.position.set(offset, 0, 0.3);
+      }
+      
+      // Add pupil
+      const pupil = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 8, 8),
+        pupilMaterial
+      );
+      pupil.position.z = 0.08;
+      eye.add(pupil);
+      
+      npc.add(eye);
+    }
+    
+    // Add same special features as in initCrushableObstacles based on type
+    this.addSpecialFeaturestoNPC(npc, npcType);
+    
+    // Set up physics and behavior properties
+    const moveStyle = npcType.movementStyle;
+    npc.userData = {
+      id: `npc-platform-${platformZ}`,
+      type: npcType.name,
+      segmentType: 'enemy',
+      isMoving: true,
+      moveSpeed: npcType.speed + Math.random() * 0.01,
+      movementRange: platformY + 1.0, // For vertical movement constraint
+      platformWidth: platform.geometry.parameters.width,
+      startX: platformX,
+      startY: y,
+      startZ: platformZ,
+      moveDirection: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
+      isCrushed: false,
+      movementStyle: moveStyle,
+      jumpHeight: npcType.jumpHeight,
+      jumpTime: 0,
+      strength: npcType.strength,
+      crushable: npcType.crushable,
+      attackCooldown: 0,
+      wingFlapDirection: 1,
+      wingFlapSpeed: 0.05,
+      ghostTimer: Math.random() * Math.PI * 2,
+      originalY: y,
+      zPosition: platformZ
+    };
+    
+    // Add to scene and to our list
+    this.scene.add(npc);
+    this.crushableObstacles.push(npc);
+    
+    // Emit to server about this obstacle
+    if (this.socket) {
+      this.socket.emit('addObstacle', {
+        id: npc.userData.id,
+        position: npc.position,
+        type: npcType.name
+      });
+    }
+    
+    return npc;
+  }
+  
+  addSpecialFeaturestoNPC(npc, npcType) {
+    if (npcType.name === 'Goomba') {
+      // Add feet to Goomba
+      const footGeometry = new THREE.BoxGeometry(0.3, 0.2, 0.3);
+      const footMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+      
+      for (let f = 0; f < 2; f++) {
+        const foot = new THREE.Mesh(footGeometry, footMaterial);
+        foot.position.set(f === 0 ? 0.25 : -0.25, -0.3, 0);
+        npc.add(foot);
+      }
+    } else if (npcType.name === 'Spiny') {
+      // Add spikes to the Spiny
+      const spikeGeometry = new THREE.ConeGeometry(0.08, 0.25, 4);
+      const spikeMaterial = new THREE.MeshStandardMaterial({ color: 0xFF0000 });
+      
+      for (let s = 0; s < 8; s++) {
+        const spike = new THREE.Mesh(spikeGeometry, spikeMaterial);
+        const angle = (s / 8) * Math.PI * 2;
+        spike.position.set(
+          Math.cos(angle) * 0.5,
+          Math.sin(angle) * 0.5,
+          0
+        );
+        spike.rotation.z = Math.PI / 2;
+        spike.rotation.y = angle;
+        npc.add(spike);
+      }
+    } else if (npcType.name === 'Paratroopa') {
+      // Add shell to Koopa/Paratroopa
+      const shellGeometry = new THREE.SphereGeometry(0.4, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+      const shellMaterial = new THREE.MeshStandardMaterial({ color: 0xFFAA00 });
+      const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+      shell.rotation.x = Math.PI;
+      shell.position.y = 0.2;
+      npc.add(shell);
+      
+      // Add wings to Paratroopa
+      const wingGeometry = new THREE.PlaneGeometry(0.6, 0.4);
+      const wingMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xFFFFFF,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9
+      });
+      
+      for (let w = 0; w < 2; w++) {
+        const wing = new THREE.Mesh(wingGeometry, wingMaterial);
+        wing.position.set(w === 0 ? -0.4 : 0.4, 0.2, 0);
+        wing.rotation.y = w === 0 ? Math.PI / 4 : -Math.PI / 4;
+        npc.add(wing);
+        
+        // Store wing reference for animation
+        if (!npc.userData) npc.userData = {};
+        if (!npc.userData.wings) npc.userData.wings = [];
+        npc.userData.wings.push(wing);
+      }
+    } else if (npcType.name === 'Boo') {
+      // Add "arms" to Boo
+      const armGeometry = new THREE.CapsuleGeometry(0.15, 0.3, 4, 8);
+      const armMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xFFFFFF,
+        transparent: true,
+        opacity: 0.7
+      });
+      
+      for (let a = 0; a < 2; a++) {
+        const arm = new THREE.Mesh(armGeometry, armMaterial);
+        arm.position.set(a === 0 ? -0.5 : 0.5, -0.2, 0);
+        arm.rotation.z = a === 0 ? -Math.PI / 4 : Math.PI / 4;
+        npc.add(arm);
+      }
+    }
+  }
+  
+  createCoins() {
+    // Initialize coin array
+    this.coins = [];
+    this.coinRespawnPool = [];
+    
+    // First, add coins to all existing platforms
+    this.platforms.forEach(platform => {
+      if (Math.random() > 0.3) { // 70% chance for each platform to have coins
+        this.generateCoinsForPlatform(platform);
+      }
     });
+    
+    // Then create some floating coins in the path for more interest
+    const floatingCoinCount = 15;
+    for (let i = 0; i < floatingCoinCount; i++) {
+      // Create floating coin paths in random arrangements
+      const startZ = -(i * 10) - 5; // Stagger coins along the path
+      const x = (Math.random() - 0.5) * 15;
+      const y = 1 + Math.random() * 3; // Height above ground
+      
+      // Create a coin cluster
+      const clusterSize = Math.random() > 0.7 ? 1 : Math.floor(Math.random() * 4) + 1;
+      
+      for (let j = 0; j < clusterSize; j++) {
+        let coinX, coinY, coinZ;
+        
+        if (clusterSize === 1) {
+          // Single coin
+          coinX = x;
+          coinY = y;
+          coinZ = startZ;
+        } else {
+          // Arrange in a pattern
+          const arrangement = Math.floor(Math.random() * 3);
+          
+          switch (arrangement) {
+            case 0: // Line
+              coinX = x;
+              coinY = y;
+              coinZ = startZ - j * 0.8;
+              break;
+            case 1: // Arc
+              const angle = (j / (clusterSize - 1)) * Math.PI;
+              coinX = x + Math.cos(angle) * 1.2;
+              coinY = y + Math.sin(angle) * 0.5;
+              coinZ = startZ;
+              break;
+            case 2: // Circle
+              const circleAngle = (j / clusterSize) * Math.PI * 2;
+              coinX = x + Math.cos(circleAngle) * 0.8;
+              coinY = y + Math.sin(circleAngle) * 0.8;
+              coinZ = startZ;
+              break;
+          }
+        }
+        
+        this.createCoin(coinX, coinY, coinZ);
+      }
+    }
+  }
+  
+  createCoin(x, y, z) {
+    // Create coin geometry based on coin size
+    const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
+    const material = new THREE.MeshStandardMaterial({ 
+      color: 0xFFD700, // Gold
+      metalness: 1,
+      roughness: 0.3,
+      emissive: 0x665000,
+      emissiveIntensity: 0.5
+    });
+    
+    const coin = new THREE.Mesh(geometry, material);
+    coin.rotation.x = Math.PI / 2; // Make it flat
+    coin.position.set(x, y, z);
+    coin.castShadow = true;
+    
+    // Store coin data
+    coin.userData = {
+      segmentType: 'coin',
+      isCollected: false,
+      zPosition: z,
+      rotationSpeed: 0.02 + Math.random() * 0.02
+    };
+    
+    this.coins.push(coin);
+    this.scene.add(coin);
+    
+    return coin;
   }
   
   selectCharacter(character) {
@@ -974,26 +1675,359 @@ export default class MultiplayerPlatformer {
     // Update player name labels
     this.updatePlayerLabels();
     
+    // Update moving platforms
+    this.updateMovingPlatforms();
+    
     // Update crushable obstacles
     this.updateCrushableObstacles();
     
     // Check crushable obstacle collisions
     this.checkCrushableObstacleCollisions();
     
+    // Update procedural world generation
+    if (this.playerMesh) {
+      this.updateProceduralWorld();
+    }
+    
     // Decrease attack cooldown
     if (this.attackCooldown > 0) {
       this.attackCooldown--;
     }
     
-    // Rotate coins for visual effect
+    // Rotate coins for visual effect with their individual speeds
     this.coins.forEach(coin => {
       if (!coin.userData.isCollected) {
-        coin.rotation.z += 0.02;
+        coin.rotation.z += coin.userData.rotationSpeed || 0.02;
       }
     });
     
     // Render the scene
     this.renderer.render(this.scene, this.camera);
+  }
+  
+  updateMovingPlatforms() {
+    // Update positions of moving platforms
+    for (const platform of this.platforms) {
+      const userData = platform.userData;
+      
+      if (userData.movingPlatform) {
+        const time = Date.now() * 0.001; // Current time in seconds
+        
+        if (userData.movementAxis === 'y') {
+          // Vertical movement (up and down)
+          platform.position.y = userData.originalY + 
+            Math.sin(time * userData.movementFrequency + userData.movementPhase) * 
+            userData.movementAmplitude;
+        } else {
+          // Horizontal movement (left and right)
+          platform.position.x = userData.startX + 
+            Math.sin(time * userData.movementFrequency + userData.movementPhase) * 
+            userData.movementAmplitude;
+        }
+      }
+    }
+  }
+  
+  updateProceduralWorld() {
+    // Track player movement for world generation
+    const playerZ = this.playerMesh.position.z;
+    
+    // Generate new world sections as player advances
+    if (playerZ < this.generatedZ + 100) { // If player is within 100 units of the end
+      this.extendWorld();
+    }
+    
+    // Check if player has moved far enough to change theme
+    this.distanceTraveled = Math.abs(playerZ);
+    if (this.distanceTraveled > this.nextThemeChange) {
+      this.changeWorldTheme();
+    }
+    
+    // Recycle world elements that are far behind the player
+    this.recycleWorldElements(playerZ);
+    
+    // Respawn collected coins and crushed NPCs
+    this.handleRespawning(playerZ);
+  }
+  
+  extendWorld() {
+    // Generate new ground segments
+    const lastSegmentZ = this.generatedZ;
+    const newSegmentZ = lastSegmentZ - 50; // Create a new segment 50 units further
+    
+    // Create new ground segment
+    const groundGeometry = new THREE.BoxGeometry(50, 1, 50);
+    const groundMaterial = new THREE.MeshStandardMaterial({ 
+      color: this.themeProperties[this.currentTheme].groundColor,
+      roughness: 0.8,
+      metalness: 0.2
+    });
+    
+    const groundSegment = new THREE.Mesh(groundGeometry, groundMaterial);
+    groundSegment.position.set(0, -0.5, newSegmentZ - 25); // Center the segment
+    groundSegment.receiveShadow = true;
+    
+    // Assign segment data
+    groundSegment.userData = {
+      segmentType: 'ground',
+      zIndex: newSegmentZ,
+    };
+    
+    this.groundSegments.push(groundSegment);
+    this.scene.add(groundSegment);
+    
+    // Create new platforms in the new segment
+    const platformCount = 1 + Math.floor(Math.random() * 3); // 1-3 platforms per segment
+    for (let i = 0; i < platformCount; i++) {
+      const z = newSegmentZ + Math.random() * 40; // Random position within segment
+      this.generatePlatform(z);
+    }
+    
+    // Create decorations in the new segment
+    const decorationCount = 2 + Math.floor(Math.random() * 4); // 2-5 decorations per segment
+    for (let i = 0; i < decorationCount; i++) {
+      const x = (Math.random() - 0.5) * 40;
+      const z = newSegmentZ + Math.random() * 50;
+      this.generateDecoration(x, z);
+    }
+    
+    // Update the furthest generated point
+    this.generatedZ = newSegmentZ;
+  }
+  
+  changeWorldTheme() {
+    // Select a new theme different from the current one
+    let newTheme;
+    do {
+      const themeIndex = Math.floor(Math.random() * this.worldThemes.length);
+      newTheme = this.worldThemes[themeIndex];
+    } while (newTheme === this.currentTheme);
+    
+    console.log(`Changing theme from ${this.currentTheme} to ${newTheme}`);
+    this.currentTheme = newTheme;
+    
+    // Set when the next theme change will occur
+    this.nextThemeChange = this.distanceTraveled + 300 + Math.random() * 200;
+    
+    // Update scene properties based on new theme
+    const themeProps = this.themeProperties[this.currentTheme];
+    this.scene.background = new THREE.Color(themeProps.skyColor);
+    this.scene.fog.color = new THREE.Color(themeProps.fogColor);
+    this.scene.fog.near = themeProps.fogNear;
+    this.scene.fog.far = themeProps.fogFar;
+    
+    // Ground and decoration changes will happen gradually as new sections are generated
+  }
+  
+  recycleWorldElements(playerZ) {
+    // Calculate the cutoff point for recycling (distance behind player)
+    const recycleCutoff = playerZ + this.respawnDistance;
+    
+    // Recycle ground segments
+    this.groundSegments.forEach((segment, index) => {
+      if (segment.position.z > recycleCutoff) {
+        // Move this segment to the end of the world
+        this.scene.remove(segment);
+        this.groundSegments.splice(index, 1);
+        // No need to add back - we'll generate new ones as needed
+      }
+    });
+    
+    // Recycle platforms
+    this.platforms.forEach((platform, index) => {
+      if (platform.position.z > recycleCutoff) {
+        // Add platform to respawn pool and remove from active list
+        this.scene.remove(platform);
+        this.platforms.splice(index, 1);
+      }
+    });
+    
+    // Recycle decorations
+    this.decorations.forEach((decoration, index) => {
+      if (decoration.position.z > recycleCutoff) {
+        this.scene.remove(decoration);
+        this.decorations.splice(index, 1);
+      }
+    });
+  }
+  
+  handleRespawning(playerZ) {
+    // Respawn coins that were collected
+    this.coins.forEach((coin, index) => {
+      if (coin.userData.isCollected) {
+        // Add to respawn pool
+        if (!this.coinRespawnPool.includes(coin)) {
+          this.coinRespawnPool.push(coin);
+          this.scene.remove(coin);
+          this.coins.splice(index, 1);
+        }
+      }
+    });
+    
+    // Respawn crushed NPCs
+    this.crushableObstacles.forEach((npc, index) => {
+      if (npc.userData.isCrushed) {
+        // Add to respawn pool
+        if (!this.npcRespawnPool.includes(npc)) {
+          this.npcRespawnPool.push(npc);
+          this.scene.remove(npc);
+          this.crushableObstacles.splice(index, 1);
+        }
+      }
+    });
+    
+    // Generate new coins and NPCs from respawn pools
+    const respawnCutoff = playerZ - 50; // Only respawn things out of view
+    
+    // Respawn from the coin pool
+    const coinsToRespawn = Math.min(2, this.coinRespawnPool.length);
+    for (let i = 0; i < coinsToRespawn; i++) {
+      const coin = this.coinRespawnPool.pop();
+      if (coin) {
+        // Find a platform to place the coin on
+        const eligiblePlatforms = this.platforms.filter(p => p.position.z < respawnCutoff);
+        
+        if (eligiblePlatforms.length > 0) {
+          const platform = eligiblePlatforms[Math.floor(Math.random() * eligiblePlatforms.length)];
+          
+          // Reposition the coin
+          coin.position.set(
+            platform.position.x, 
+            platform.position.y + 0.5, 
+            platform.position.z
+          );
+          
+          // Reset coin state
+          coin.userData.isCollected = false;
+          coin.userData.zPosition = platform.position.z;
+          coin.visible = true;
+          
+          // Add back to scene and active list
+          this.scene.add(coin);
+          this.coins.push(coin);
+        } else {
+          // Put back in pool if no platforms available
+          this.coinRespawnPool.push(coin);
+        }
+      }
+    }
+    
+    // Respawn from the NPC pool
+    const npcsToRespawn = Math.min(1, this.npcRespawnPool.length);
+    for (let i = 0; i < npcsToRespawn; i++) {
+      const npc = this.npcRespawnPool.pop();
+      if (npc) {
+        // Find a platform to place the NPC on
+        const eligiblePlatforms = this.platforms.filter(p => p.position.z < respawnCutoff);
+        
+        if (eligiblePlatforms.length > 0) {
+          const platform = eligiblePlatforms[Math.floor(Math.random() * eligiblePlatforms.length)];
+          
+          // Reposition the NPC
+          let y = platform.position.y + 0.6;
+          if (npc.userData.movementStyle === 'flying') {
+            y = platform.position.y + 1.5;
+          } else if (npc.userData.movementStyle === 'ghost') {
+            y = platform.position.y + 1.0;
+          }
+          
+          npc.position.set(
+            platform.position.x, 
+            y, 
+            platform.position.z
+          );
+          
+          // Reset NPC state
+          npc.userData.isCrushed = false;
+          npc.userData.zPosition = platform.position.z;
+          npc.userData.startX = platform.position.x;
+          npc.userData.startY = y;
+          npc.userData.startZ = platform.position.z;
+          npc.userData.isMoving = true;
+          npc.scale.set(1, 1, 1); // Reset scale (uncrushed)
+          
+          // Reset materials
+          npc.traverse(child => {
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach(material => {
+                  material.transparent = npc.userData.type === 'Boo';
+                  material.opacity = npc.userData.type === 'Boo' ? 0.7 : 1;
+                });
+              } else {
+                child.material.transparent = npc.userData.type === 'Boo';
+                child.material.opacity = npc.userData.type === 'Boo' ? 0.7 : 1;
+              }
+            }
+          });
+          
+          // Add back to scene and active list
+          this.scene.add(npc);
+          this.crushableObstacles.push(npc);
+        } else {
+          // Put back in pool if no platforms available
+          this.npcRespawnPool.push(npc);
+        }
+      }
+    }
+  }
+  
+  generateDecoration(x, z) {
+    const currentTheme = this.themeProperties[this.currentTheme];
+    let geometry, material, decoration;
+    
+    // Create decoration based on theme - simplified from generateDecorations
+    switch(this.currentTheme) {
+      case 'grassland':
+        // Trees or bushes
+        if (Math.random() > 0.5) {
+          // Simple tree
+          decoration = new THREE.Group();
+          
+          // Trunk
+          const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.4, 2, 6);
+          const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+          const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+          decoration.add(trunk);
+          
+          // Leaves
+          const leavesGeometry = new THREE.ConeGeometry(1, 2, 8);
+          const leavesColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+          const leavesMaterial = new THREE.MeshStandardMaterial({ color: leavesColor });
+          const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+          leaves.position.y = 1.5;
+          decoration.add(leaves);
+        } else {
+          // Bush
+          geometry = new THREE.SphereGeometry(0.5 + Math.random() * 0.5, 8, 8);
+          const bushColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+          material = new THREE.MeshStandardMaterial({ color: bushColor });
+          decoration = new THREE.Mesh(geometry, material);
+        }
+        break;
+        
+      default:
+        // Simple shape for other themes
+        geometry = new THREE.BoxGeometry(1 + Math.random(), 1 + Math.random(), 1 + Math.random());
+        const decorColor = currentTheme.decorationColors[Math.floor(Math.random() * currentTheme.decorationColors.length)];
+        material = new THREE.MeshStandardMaterial({ color: decorColor });
+        decoration = new THREE.Mesh(geometry, material);
+    }
+    
+    decoration.position.set(x, 0, z);
+    decoration.castShadow = true;
+    decoration.receiveShadow = true;
+    
+    // Store decoration data
+    decoration.userData = {
+      segmentType: 'decoration',
+      zPosition: z
+    };
+    
+    this.decorations.push(decoration);
+    this.scene.add(decoration);
+    
+    return decoration;
   }
   
   updateCrushableObstacles() {
