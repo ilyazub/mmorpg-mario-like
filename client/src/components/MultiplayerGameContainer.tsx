@@ -129,8 +129,10 @@ export default function MultiplayerGameContainer() {
         <ul className="list-disc pl-5">
           <li>Movement: Arrow Keys or WASD</li>
           <li>Jump: Space Bar</li>
-          <li>Collect coins to increase your score!</li>
+          <li>Attack: F, E, or X Key (+100 points)</li>
+          <li>Collect coins to increase your score! (+10 points)</li>
           <li>Jump on enemies to crush them! (+50 points)</li>
+          <li>Attack enemies from the front with your special move!</li>
           <li>Avoid enemies from the sides or you'll lose a life!</li>
           <li>Play with friends - obstacles crushed by one player are crushed for everyone!</li>
         </ul>

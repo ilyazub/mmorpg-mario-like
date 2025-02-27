@@ -40,6 +40,8 @@ export default class MultiplayerPlatformer {
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.playerMesh = null;
     this.characterData = null;
+    this.isAttacking = false;
+    this.attackCooldown = 0;
     
     // Controls state
     this.keys = {
@@ -47,7 +49,8 @@ export default class MultiplayerPlatformer {
       backward: false,
       left: false,
       right: false,
-      jump: false
+      jump: false,
+      attack: false
     };
     
     // Setup event listeners
@@ -425,6 +428,12 @@ export default class MultiplayerPlatformer {
           this.isJumping = true;
         }
         break;
+      case 'f': // Attack key - common in many games
+      case 'e': // Alternative attack key
+      case 'x': // Classic console action button
+        this.keys.attack = true;
+        this.performAttack();
+        break;
     }
   }
   
@@ -449,6 +458,76 @@ export default class MultiplayerPlatformer {
       case ' ': // Space bar
         this.keys.jump = false;
         break;
+      case 'f': // Attack key
+      case 'e': // Alternative attack key
+      case 'x': // Classic console action button
+        this.keys.attack = false;
+        break;
+    }
+  }
+  
+  performAttack() {
+    if (!this.isRunning || !this.playerMesh || this.isAttacking || this.attackCooldown > 0) return;
+    
+    console.log('Player attacking!');
+    this.isAttacking = true;
+    
+    // Create a visual effect for the attack
+    const attackGeometry = new THREE.SphereGeometry(0.6, 16, 16);
+    const attackMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xFFD700, 
+      transparent: true, 
+      opacity: 0.7 
+    });
+    const attackMesh = new THREE.Mesh(attackGeometry, attackMaterial);
+    
+    // Position the attack effect in front of the player
+    const directionVector = new THREE.Vector3(0, 0, -1);
+    if (this.velocity.x !== 0 || this.velocity.z !== 0) {
+      directionVector.set(this.velocity.x, 0, this.velocity.z).normalize();
+    }
+    
+    attackMesh.position.copy(this.playerMesh.position);
+    attackMesh.position.add(directionVector.multiplyScalar(1.2));
+    
+    this.scene.add(attackMesh);
+    
+    // Check for crushable obstacles in attack range
+    this.checkAttackCollisions(attackMesh);
+    
+    // Remove the attack effect after a short duration
+    setTimeout(() => {
+      this.scene.remove(attackMesh);
+      this.isAttacking = false;
+      
+      // Add cooldown
+      this.attackCooldown = 20;
+    }, 300);
+  }
+  
+  checkAttackCollisions(attackMesh) {
+    if (!this.playerMesh) return;
+    
+    const attackBox = new THREE.Box3().setFromObject(attackMesh);
+    
+    for (const obstacle of this.crushableObstacles) {
+      if (obstacle.userData.isCrushed) continue;
+      
+      const obstacleBox = new THREE.Box3().setFromObject(obstacle);
+      
+      if (attackBox.intersectsBox(obstacleBox)) {
+        console.log('Attack hit obstacle:', obstacle.userData.id);
+        this.crushObstacle(obstacle);
+        
+        // Increase score
+        this.score += 100;
+        
+        // Tell other players about the crushed obstacle
+        this.socket.emit('obstacleUpdate', {
+          id: obstacle.userData.id,
+          isCrushed: true
+        });
+      }
     }
   }
   
@@ -604,6 +683,11 @@ export default class MultiplayerPlatformer {
     
     // Check crushable obstacle collisions
     this.checkCrushableObstacleCollisions();
+    
+    // Decrease attack cooldown
+    if (this.attackCooldown > 0) {
+      this.attackCooldown--;
+    }
     
     // Rotate coins for visual effect
     this.coins.forEach(coin => {

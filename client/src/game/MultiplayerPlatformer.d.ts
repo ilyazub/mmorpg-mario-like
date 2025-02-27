@@ -19,13 +19,36 @@ declare module '../game/MultiplayerPlatformer' {
     socket: any;
     playerMesh: any;
     characterData: Character | null;
+    isAttacking: boolean;
+    attackCooldown: number;
     
+    // Game methods
     selectCharacter(character: Character): void;
     startGame(): void;
     gameOver(): void;
     restartGame(): void;
     updateSettings(settings: any): void;
     
-    // Add other methods as needed
+    // Movement and input
+    handleKeyDown(event: KeyboardEvent): void;
+    handleKeyUp(event: KeyboardEvent): void;
+    updatePlayerPosition(deltaTime: number): void;
+    
+    // Attack methods
+    performAttack(): void;
+    checkAttackCollisions(attackMesh: any): void;
+    
+    // Collision detection
+    checkPlatformCollisions(): void;
+    checkCoinCollisions(): void;
+    checkCrushableObstacleCollisions(): void;
+    
+    // Obstacle handling
+    crushObstacle(obstacle: any): void;
+    updateCrushableObstacles(): void;
+    
+    // Animation and rendering
+    animate(): void;
+    updatePlayerLabels(): void;
   }
 }
