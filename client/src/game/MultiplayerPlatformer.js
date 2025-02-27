@@ -8,6 +8,8 @@ export default class MultiplayerPlatformer {
     this.score = 0;
     this.lives = 3;
     this.players = new Map(); // Store other players
+    this.obstacles = []; // Store obstacles
+    this.crushableObstacles = []; // Store crushable obstacles
     
     // Socket.io connection
     this.socket = io();
@@ -56,6 +58,8 @@ export default class MultiplayerPlatformer {
     // Initialize game elements
     this.initLights();
     this.initWorld();
+    this.initObstacles();
+    this.initCrushableObstacles();
     
     // Start animation loop
     this.lastUpdateTime = Date.now();
@@ -168,6 +172,123 @@ export default class MultiplayerPlatformer {
     directionalLight.shadow.camera.bottom = -20;
     
     this.scene.add(directionalLight);
+  }
+  
+  initObstacles() {
+    // Create static obstacles
+    const obstaclePositions = [
+      { x: -8, y: 0.5, z: -2, width: 1, height: 1, depth: 1 },
+      { x: 8, y: 0.5, z: -2, width: 1, height: 1, depth: 1 },
+      { x: 0, y: 0.5, z: -12, width: 1, height: 1, depth: 1 }
+    ];
+    
+    obstaclePositions.forEach(pos => {
+      const geometry = new THREE.BoxGeometry(pos.width, pos.height, pos.depth);
+      const material = new THREE.MeshStandardMaterial({ 
+        color: 0x333333,
+        roughness: 0.8,
+        metalness: 0.2
+      });
+      const obstacle = new THREE.Mesh(geometry, material);
+      obstacle.position.set(pos.x, pos.y, pos.z);
+      obstacle.castShadow = true;
+      obstacle.receiveShadow = true;
+      
+      this.obstacles.push(obstacle);
+      this.scene.add(obstacle);
+    });
+  }
+  
+  initCrushableObstacles() {
+    // Add crushable obstacles (like Goomba enemies in Mario)
+    const crushablePositions = [
+      { x: 3, y: 0.5, z: -3 },
+      { x: -3, y: 0.5, z: -5 },
+      { x: 0, y: 0.5, z: -8 },
+      { x: 5, y: 3.5, z: -5 },
+      { x: -5, y: 3.5, z: -5 }
+    ];
+    
+    crushablePositions.forEach((pos, index) => {
+      // Create body
+      const bodyGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+      const bodyMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8B4513, // Brown
+        roughness: 0.7,
+        metalness: 0.2
+      });
+      const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+      body.position.set(pos.x, pos.y, pos.z);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      
+      // Create eyes
+      const eyeGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+      const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      
+      const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+      leftEye.position.set(0.2, 0.2, 0.4);
+      body.add(leftEye);
+      
+      const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+      rightEye.position.set(-0.2, 0.2, 0.4);
+      body.add(rightEye);
+      
+      // Create pupils
+      const pupilGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+      const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      
+      const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+      leftPupil.position.set(0, 0, 0.05);
+      leftEye.add(leftPupil);
+      
+      const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+      rightPupil.position.set(0, 0, 0.05);
+      rightEye.add(rightPupil);
+      
+      // Create feet
+      const footGeometry = new THREE.BoxGeometry(0.3, 0.2, 0.3);
+      const footMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+      
+      const leftFoot = new THREE.Mesh(footGeometry, footMaterial);
+      leftFoot.position.set(0.25, -0.4, 0);
+      body.add(leftFoot);
+      
+      const rightFoot = new THREE.Mesh(footGeometry, footMaterial);
+      rightFoot.position.set(-0.25, -0.4, 0);
+      body.add(rightFoot);
+      
+      // Add properties to the obstacle
+      body.userData.id = `crushable-${index}`;
+      body.userData.isCrushable = true;
+      body.userData.isCrushed = false;
+      body.userData.isMoving = true;
+      body.userData.direction = 1; // 1 for right, -1 for left
+      body.userData.speed = 0.03;
+      body.userData.maxX = pos.x + 2; // Maximum x position
+      body.userData.minX = pos.x - 2; // Minimum x position
+      
+      // Add obstacle to the scene and array
+      this.crushableObstacles.push(body);
+      this.scene.add(body);
+      
+      // Emit event to server about new obstacle
+      this.socket.emit('addObstacle', {
+        id: body.userData.id,
+        position: pos,
+        type: 'crushable'
+      });
+    });
+    
+    // Listen for obstacle updates from other players
+    this.socket.on('obstacleUpdate', (data) => {
+      const obstacle = this.crushableObstacles.find(o => o.userData.id === data.id);
+      if (obstacle) {
+        if (data.isCrushed && !obstacle.userData.isCrushed) {
+          this.crushObstacle(obstacle);
+        }
+      }
+    });
   }
   
   initWorld() {
@@ -478,6 +599,12 @@ export default class MultiplayerPlatformer {
     // Update player name labels
     this.updatePlayerLabels();
     
+    // Update crushable obstacles
+    this.updateCrushableObstacles();
+    
+    // Check crushable obstacle collisions
+    this.checkCrushableObstacleCollisions();
+    
     // Rotate coins for visual effect
     this.coins.forEach(coin => {
       if (!coin.userData.isCollected) {
@@ -487,6 +614,113 @@ export default class MultiplayerPlatformer {
     
     // Render the scene
     this.renderer.render(this.scene, this.camera);
+  }
+  
+  updateCrushableObstacles() {
+    this.crushableObstacles.forEach(obstacle => {
+      if (obstacle.userData.isMoving && !obstacle.userData.isCrushed) {
+        // Move the obstacle left and right
+        obstacle.position.x += obstacle.userData.direction * obstacle.userData.speed;
+        
+        // Check if we need to reverse direction
+        if (obstacle.position.x > obstacle.userData.maxX) {
+          obstacle.userData.direction = -1;
+          obstacle.rotation.y = Math.PI; // Turn around
+        } else if (obstacle.position.x < obstacle.userData.minX) {
+          obstacle.userData.direction = 1;
+          obstacle.rotation.y = 0; // Turn around
+        }
+      }
+    });
+  }
+  
+  checkCrushableObstacleCollisions() {
+    if (!this.playerMesh || !this.isRunning) return;
+    
+    const playerBox = new THREE.Box3().setFromObject(this.playerMesh);
+    
+    for (const obstacle of this.crushableObstacles) {
+      if (obstacle.userData.isCrushed) continue;
+      
+      const obstacleBox = new THREE.Box3().setFromObject(obstacle);
+      
+      if (playerBox.intersectsBox(obstacleBox)) {
+        // Check if player is above the obstacle (jumping on its head)
+        const playerBottom = this.playerMesh.position.y - 0.5; // Bottom of player
+        const obstacleTop = obstacle.position.y + 0.4; // Top of obstacle
+        
+        if (playerBottom >= obstacleTop && this.velocity.y < 0) {
+          // Crushing the obstacle!
+          this.crushObstacle(obstacle);
+          
+          // Bounce the player up
+          this.velocity.y = this.jumpForce * 0.8;
+          
+          // Increase score
+          this.score += 50;
+          console.log('Crushed obstacle! Score:', this.score);
+          
+          // Tell other players about the crushed obstacle
+          this.socket.emit('obstacleUpdate', {
+            id: obstacle.userData.id,
+            isCrushed: true
+          });
+        } else {
+          // Player hit the obstacle without crushing it
+          if (!obstacle.userData.isCrushed) {
+            // Player loses a life
+            this.lives -= 1;
+            console.log('Ouch! Lives remaining:', this.lives);
+            
+            // Knockback effect
+            const knockbackDirection = new THREE.Vector3();
+            knockbackDirection.subVectors(this.playerMesh.position, obstacle.position).normalize();
+            this.playerMesh.position.x += knockbackDirection.x * 2;
+            this.playerMesh.position.z += knockbackDirection.z * 2;
+            this.velocity.y = this.jumpForce * 0.5; // Small bounce
+            
+            // Check for game over
+            if (this.lives <= 0) {
+              this.gameOver();
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  crushObstacle(obstacle) {
+    // Mark as crushed
+    obstacle.userData.isCrushed = true;
+    obstacle.userData.isMoving = false;
+    
+    // Squash the obstacle
+    obstacle.scale.y = 0.2;
+    obstacle.position.y = 0.1;
+    
+    // Make it transparent
+    obstacle.traverse(child => {
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(material => {
+            material.transparent = true;
+            material.opacity = 0.5;
+          });
+        } else {
+          child.material.transparent = true;
+          child.material.opacity = 0.5;
+        }
+      }
+    });
+    
+    // Remove after delay
+    setTimeout(() => {
+      this.scene.remove(obstacle);
+      const index = this.crushableObstacles.indexOf(obstacle);
+      if (index > -1) {
+        this.crushableObstacles.splice(index, 1);
+      }
+    }, 3000);
   }
   
   // Method to be called from outside to update settings

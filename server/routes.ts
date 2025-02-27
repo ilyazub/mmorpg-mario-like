@@ -13,8 +13,22 @@ interface PlayerData {
   };
 }
 
+interface ObstacleData {
+  id: string;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  type: string;
+  isCrushed?: boolean;
+}
+
 // Store connected players
 const players = new Map<string, PlayerData>();
+
+// Store game obstacles
+const obstacles = new Map<string, ObstacleData>();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix with /api
@@ -30,6 +44,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       position: data.position
     }));
     res.json(playersList);
+  });
+
+  app.get("/api/obstacles", (req, res) => {
+    const obstaclesList = Array.from(obstacles.entries()).map(([id, data]) => ({
+      id,
+      position: data.position,
+      type: data.type,
+      isCrushed: data.isCrushed || false
+    }));
+    res.json(obstaclesList);
   });
 
   const httpServer = createServer(app);
@@ -49,6 +73,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           position: playerData.position
         });
       }
+    });
+    
+    // Send list of current obstacles to newly connected player
+    obstacles.forEach((obstacleData, obstacleId) => {
+      socket.emit("obstacleState", {
+        id: obstacleId,
+        position: obstacleData.position,
+        type: obstacleData.type,
+        isCrushed: obstacleData.isCrushed || false
+      });
     });
     
     // Handle character selection
@@ -86,6 +120,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: socket.id,
           position: data.position
         });
+      }
+    });
+    
+    // Handle obstacle addition
+    socket.on("addObstacle", (data: ObstacleData) => {
+      // Store obstacle data
+      obstacles.set(data.id, {
+        id: data.id,
+        position: data.position,
+        type: data.type
+      });
+      
+      // Broadcast to all other players about the new obstacle
+      socket.broadcast.emit("obstacleState", {
+        id: data.id,
+        position: data.position,
+        type: data.type
+      });
+    });
+    
+    // Handle obstacle updates (crushed, moved, etc.)
+    socket.on("obstacleUpdate", (data: { id: string, isCrushed?: boolean }) => {
+      // Update obstacle in our records
+      if (obstacles.has(data.id)) {
+        const obstacle = obstacles.get(data.id)!;
+        
+        if (data.isCrushed !== undefined) {
+          obstacle.isCrushed = data.isCrushed;
+        }
+        
+        obstacles.set(data.id, obstacle);
+        
+        // Broadcast obstacle update to all other players
+        socket.broadcast.emit("obstacleUpdate", data);
       }
     });
     

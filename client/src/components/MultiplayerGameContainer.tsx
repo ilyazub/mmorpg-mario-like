@@ -107,6 +107,8 @@ export default function MultiplayerGameContainer() {
           <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white p-2 rounded z-10">
             <div>Score: {score}</div>
             <div>Lives: {lives}</div>
+            <div>Enemies: {gameRef.current?.crushableObstacles?.length || 0}</div>
+            <div>Players: {gameRef.current?.players?.size || 1}</div>
           </div>
         )}
         
@@ -128,6 +130,9 @@ export default function MultiplayerGameContainer() {
           <li>Movement: Arrow Keys or WASD</li>
           <li>Jump: Space Bar</li>
           <li>Collect coins to increase your score!</li>
+          <li>Jump on enemies to crush them! (+50 points)</li>
+          <li>Avoid enemies from the sides or you'll lose a life!</li>
+          <li>Play with friends - obstacles crushed by one player are crushed for everyone!</li>
         </ul>
       </div>
     </div>
