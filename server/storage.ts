@@ -148,9 +148,14 @@ export class MemStorage implements IStorage {
   
   async createWorldElement(element: InsertWorldElement): Promise<WorldElement> {
     const id = this.elementId++;
-    const newElement = {
+    const newElement: WorldElement = {
       ...element,
-      id
+      id,
+      isActive: element.isActive ?? true,
+      width: element.width ?? null,
+      height: element.height ?? null,
+      depth: element.depth ?? null,
+      theme: element.theme ?? null
     };
     
     const worldElements = this.worldElements.get(element.worldId) || [];
@@ -179,9 +184,10 @@ export class MemStorage implements IStorage {
   
   async createParallaxLayer(layer: InsertParallaxLayer): Promise<ParallaxLayer> {
     const id = this.layerId++;
-    const newLayer = {
+    const newLayer: ParallaxLayer = {
       ...layer,
-      id
+      id,
+      isActive: layer.isActive ?? true
     };
     
     const worldLayers = this.parallaxLayers.get(layer.worldId) || [];
