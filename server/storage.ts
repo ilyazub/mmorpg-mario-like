@@ -297,6 +297,4 @@ export class DatabaseStorage implements IStorage {
 }
 
 // We're now using the database storage for persistence
-import { eq } from "drizzle-orm";
-import { db } from "./db";
 export const storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
