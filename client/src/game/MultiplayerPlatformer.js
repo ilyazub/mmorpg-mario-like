@@ -1001,47 +1001,383 @@ export default class MultiplayerPlatformer {
     this.scene.background = new THREE.Color(currentTheme.skyColor);
     this.scene.fog = new THREE.Fog(currentTheme.fogColor, currentTheme.fogNear, currentTheme.fogFar);
     
-    // Generate ground segments
-    const groundWidth = 50; // Width of each ground segment
-    const groundDepth = 200; // Length of ground extending forward
+    // Initialize exploration zones tracking
+    this.exploredZones = new Set(); // Track which grid zones we've generated
+    this.zoneSize = 50; // Size of each zone grid
+    this.generationRadius = 3; // Generate this many zones in each direction
     
-    // Create multiple ground segments for the "endless" effect
-    for (let z = 0; z > -groundDepth; z -= 50) {
-      const groundGeometry = new THREE.BoxGeometry(groundWidth, 1, 50);
-      const groundMaterial = new THREE.MeshStandardMaterial({ 
-        color: currentTheme.groundColor,
-        roughness: 0.8,
-        metalness: 0.2
-      });
-      
-      const groundSegment = new THREE.Mesh(groundGeometry, groundMaterial);
-      groundSegment.position.set(0, -0.5, z - 25); // Center the segment
-      groundSegment.receiveShadow = true;
-      
-      // Assign segment data for recycling later
-      groundSegment.userData = {
-        segmentType: 'ground',
-        zIndex: z,
-      };
-      
-      this.groundSegments.push(groundSegment);
-      this.scene.add(groundSegment);
-      
-      // Track the furthest point we've generated
-      this.generatedZ = Math.min(this.generatedZ, z - 50);
+    // Generate initial central zone
+    this.generateWorldZone(0, 0);
+    
+    // Generate surrounding zones in a grid pattern for 360° exploration
+    for (let x = -this.generationRadius; x <= this.generationRadius; x++) {
+      for (let z = -this.generationRadius; z <= this.generationRadius; z++) {
+        // Skip the central zone (already generated)
+        if (x === 0 && z === 0) continue;
+        
+        // Generate zone with varied content based on distance from center
+        this.generateWorldZone(x, z);
+      }
     }
     
-    // Generate initial platforms - spread out along the path
-    const platformCount = 10;
-    for (let i = 0; i < platformCount; i++) {
-      this.generatePlatform(-(i * 20) - 10); // Stagger platforms with increasing distance
-    }
+    // Create large central platform as a hub
+    this.generateHubPlatform();
     
-    // Generate decorative elements
-    this.generateDecorations();
+    // Generate special climbing structure in one of the zones
+    const randomX = Math.floor(Math.random() * this.generationRadius);
+    const randomZ = Math.floor(Math.random() * this.generationRadius);
+    this.generateClimbingStructure(randomX * this.zoneSize, randomZ * this.zoneSize);
+    
+    // Generate jump challenge area in another zone
+    const jumpX = -Math.floor(Math.random() * this.generationRadius);
+    const jumpZ = -Math.floor(Math.random() * this.generationRadius);
+    this.generateJumpChallengeArea(jumpX * this.zoneSize, jumpZ * this.zoneSize);
   }
   
-  generatePlatform(z) {
+  // Generate a zone of the world at specified grid coordinates
+  generateWorldZone(gridX, gridZ) {
+    const zoneKey = `${gridX},${gridZ}`;
+    if (this.exploredZones.has(zoneKey)) return; // Skip if already generated
+    
+    const worldX = gridX * this.zoneSize;
+    const worldZ = gridZ * this.zoneSize;
+    const currentTheme = this.themeProperties[this.currentTheme];
+    
+    // Create ground segment for this zone
+    const groundGeometry = new THREE.BoxGeometry(this.zoneSize, 1, this.zoneSize);
+    const groundMaterial = new THREE.MeshStandardMaterial({ 
+      color: currentTheme.groundColor,
+      roughness: 0.8,
+      metalness: 0.2
+    });
+    
+    const groundSegment = new THREE.Mesh(groundGeometry, groundMaterial);
+    groundSegment.position.set(worldX, -0.5, worldZ);
+    groundSegment.receiveShadow = true;
+    
+    // Assign segment data for recycling later
+    groundSegment.userData = {
+      segmentType: 'ground',
+      zoneKey: zoneKey,
+      gridX: gridX,
+      gridZ: gridZ
+    };
+    
+    this.groundSegments.push(groundSegment);
+    this.scene.add(groundSegment);
+    
+    // Add zone-specific features based on grid location
+    const distanceFromCenter = Math.sqrt(gridX * gridX + gridZ * gridZ);
+    
+    // More platforms and features in outer zones
+    const platformCount = Math.floor(2 + Math.random() * 4 * distanceFromCenter);
+    for (let i = 0; i < platformCount; i++) {
+      const offsetX = (Math.random() - 0.5) * this.zoneSize * 0.8;
+      const offsetZ = (Math.random() - 0.5) * this.zoneSize * 0.8;
+      this.generatePlatform(worldZ + offsetZ, worldX + offsetX);
+    }
+    
+    // Add zone-specific decorations
+    const decorationCount = Math.floor(3 + Math.random() * 5);
+    for (let i = 0; i < decorationCount; i++) {
+      const offsetX = (Math.random() - 0.5) * this.zoneSize * 0.9;
+      const offsetZ = (Math.random() - 0.5) * this.zoneSize * 0.9;
+      this.generateDecoration(worldX + offsetX, worldZ + offsetZ);
+    }
+    
+    // Add collision data for this zone
+    this.exploredZones.add(zoneKey);
+  }
+  
+  // Create a hub platform at the center
+  generateHubPlatform() {
+    const currentTheme = this.themeProperties[this.currentTheme];
+    const hubGeometry = new THREE.CylinderGeometry(10, 12, 2, 16);
+    const hubMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4a90e2,
+      roughness: 0.6,
+      metalness: 0.3
+    });
+    
+    const hubPlatform = new THREE.Mesh(hubGeometry, hubMaterial);
+    hubPlatform.position.set(0, 0, 0);
+    hubPlatform.receiveShadow = true;
+    hubPlatform.castShadow = true;
+    
+    hubPlatform.userData = {
+      type: 'platform',
+      isCollidable: true
+    };
+    
+    this.platforms.push(hubPlatform);
+    this.scene.add(hubPlatform);
+    
+    // Add decorative elements to the hub
+    const pillarCount = 8;
+    for (let i = 0; i < pillarCount; i++) {
+      const angle = (i / pillarCount) * Math.PI * 2;
+      const radius = 8;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      
+      const pillarGeometry = new THREE.CylinderGeometry(0.5, 0.5, 4, 8);
+      const pillarMaterial = new THREE.MeshStandardMaterial({
+        color: 0xd4af37,
+        roughness: 0.3,
+        metalness: 0.7
+      });
+      
+      const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
+      pillar.position.set(x, 1, z);
+      pillar.castShadow = true;
+      
+      pillar.userData = {
+        type: 'decoration',
+        isCollidable: true,
+        decorationId: `hub_pillar_${i}`,
+        decorationType: 'pillar'
+      };
+      
+      this.decorations.push(pillar);
+      this.scene.add(pillar);
+    }
+    
+    // Add a central marker
+    const markerGeometry = new THREE.SphereGeometry(1, 16, 16);
+    const markerMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff4500,
+      emissive: 0xff4500,
+      emissiveIntensity: 0.5
+    });
+    
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+    marker.position.set(0, 5, 0);
+    marker.castShadow = true;
+    
+    this.scene.add(marker);
+  }
+  
+  // Generate a climbing structure
+  generateClimbingStructure(posX, posZ) {
+    const height = 20; // Total height of structure
+    const baseSize = 8; // Size of the base
+    const levels = 6; // Number of climbing levels
+    
+    // Create base platform
+    const baseGeometry = new THREE.BoxGeometry(baseSize, 1, baseSize);
+    const baseMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8b4513,
+      roughness: 0.8
+    });
+    
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    base.position.set(posX, 0, posZ);
+    base.receiveShadow = true;
+    base.castShadow = true;
+    
+    base.userData = {
+      type: 'platform',
+      isCollidable: true
+    };
+    
+    this.platforms.push(base);
+    this.scene.add(base);
+    
+    // Create climbing platforms at different heights
+    for (let i = 1; i <= levels; i++) {
+      const levelHeight = (height / levels) * i;
+      const platformSize = baseSize * (1 - (i / levels) * 0.7); // Platforms get smaller higher up
+      
+      // Create level platform
+      const platformGeometry = new THREE.BoxGeometry(platformSize, 0.5, platformSize);
+      const platformMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8b4513,
+        roughness: 0.7
+      });
+      
+      const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+      platform.position.set(posX, levelHeight, posZ);
+      platform.receiveShadow = true;
+      platform.castShadow = true;
+      
+      platform.userData = {
+        type: 'platform',
+        isCollidable: true
+      };
+      
+      this.platforms.push(platform);
+      this.scene.add(platform);
+      
+      // Add connecting steps or ladders between levels
+      if (i > 1) {
+        const prevHeight = (height / levels) * (i - 1);
+        const stepCount = 4;
+        
+        for (let j = 0; j < stepCount; j++) {
+          const stepHeight = prevHeight + ((levelHeight - prevHeight) * j) / stepCount;
+          const stepSize = 1.5;
+          
+          const stepGeometry = new THREE.BoxGeometry(stepSize, 0.3, stepSize);
+          const stepMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8b4513,
+            roughness: 0.9
+          });
+          
+          const step = new THREE.Mesh(stepGeometry, stepMaterial);
+          
+          // Position steps in a spiral pattern
+          const angle = (j / stepCount) * Math.PI * 2 + (i * Math.PI / 2);
+          const radius = platformSize * 0.6;
+          const stepX = posX + Math.cos(angle) * radius;
+          const stepZ = posZ + Math.sin(angle) * radius;
+          
+          step.position.set(stepX, stepHeight, stepZ);
+          step.receiveShadow = true;
+          step.castShadow = true;
+          
+          step.userData = {
+            type: 'platform',
+            isCollidable: true
+          };
+          
+          this.platforms.push(step);
+          this.scene.add(step);
+        }
+      }
+    }
+    
+    // Add a reward at the top
+    const rewardGeometry = new THREE.SphereGeometry(1, 16, 16);
+    const rewardMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      metalness: 1,
+      roughness: 0.1,
+      emissive: 0xffd700,
+      emissiveIntensity: 0.5
+    });
+    
+    const reward = new THREE.Mesh(rewardGeometry, rewardMaterial);
+    reward.position.set(posX, height + 2, posZ);
+    reward.castShadow = true;
+    
+    // Add glow effect
+    const glowGeometry = new THREE.SphereGeometry(1.5, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      transparent: true,
+      opacity: 0.3
+    });
+    
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    reward.add(glow);
+    
+    reward.userData = {
+      type: 'reward',
+      isCollidable: true,
+      value: 1000
+    };
+    
+    this.scene.add(reward);
+  }
+  
+  // Create a jump challenge area with multiple platforms
+  generateJumpChallengeArea(posX, posZ) {
+    const platformCount = 8;
+    const minHeight = 2;
+    const maxHeight = 8;
+    const minDistance = 3;
+    const maxDistance = 7;
+    const baseSize = 15;
+    
+    // Create base platform
+    const baseGeometry = new THREE.BoxGeometry(baseSize, 1, baseSize);
+    const baseMaterial = new THREE.MeshStandardMaterial({
+      color: 0x32cd32,
+      roughness: 0.8
+    });
+    
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    base.position.set(posX, 0, posZ);
+    base.receiveShadow = true;
+    
+    base.userData = {
+      type: 'platform',
+      isCollidable: true
+    };
+    
+    this.platforms.push(base);
+    this.scene.add(base);
+    
+    // Starting position
+    let currentX = posX;
+    let currentZ = posZ;
+    let currentHeight = 0;
+    
+    // Create platforms in a pattern that requires jumping
+    for (let i = 0; i < platformCount; i++) {
+      // Calculate next platform position
+      const angle = Math.random() * Math.PI * 2;
+      const distance = minDistance + Math.random() * (maxDistance - minDistance);
+      
+      currentX += Math.cos(angle) * distance;
+      currentZ += Math.sin(angle) * distance;
+      currentHeight = minHeight + Math.random() * (maxHeight - minHeight);
+      
+      // Platform size gets smaller as you go higher
+      const platformSize = 2 + Math.random() * 2;
+      
+      // Create the platform
+      const platformGeometry = new THREE.BoxGeometry(platformSize, 0.5, platformSize);
+      const platformMaterial = new THREE.MeshStandardMaterial({
+        color: 0x32cd32,
+        roughness: 0.7
+      });
+      
+      const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+      platform.position.set(currentX, currentHeight, currentZ);
+      platform.receiveShadow = true;
+      platform.castShadow = true;
+      
+      platform.userData = {
+        type: 'platform',
+        isCollidable: true
+      };
+      
+      this.platforms.push(platform);
+      this.scene.add(platform);
+      
+      // Add a coin or collectible on some platforms
+      if (Math.random() > 0.5) {
+        this.generateCoinsForPlatform(platform);
+      }
+    }
+    
+    // Add a final reward platform
+    const finalPlatformGeometry = new THREE.BoxGeometry(5, 1, 5);
+    const finalPlatformMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      roughness: 0.5,
+      metalness: 0.3
+    });
+    
+    const finalPlatform = new THREE.Mesh(finalPlatformGeometry, finalPlatformMaterial);
+    finalPlatform.position.set(currentX, currentHeight + 2, currentZ);
+    finalPlatform.receiveShadow = true;
+    finalPlatform.castShadow = true;
+    
+    finalPlatform.userData = {
+      type: 'platform',
+      isCollidable: true
+    };
+    
+    this.platforms.push(finalPlatform);
+    this.scene.add(finalPlatform);
+    
+    // Add special reward on final platform
+    this.spawnRandomPowerUp(currentX, currentHeight + 3, currentZ);
+  }
+  
+  generatePlatform(z, x = undefined) {
     const currentTheme = this.themeProperties[this.currentTheme];
     
     // Generate platform with random properties
@@ -1050,10 +1386,37 @@ export default class MultiplayerPlatformer {
     const depth = 2 + Math.random() * 3;
     
     // Random position - keep platforms accessible but varied
-    const x = (Math.random() - 0.5) * 20;
-    const y = 1 + Math.random() * 5;
+    // Use provided x if available, otherwise randomize
+    const posX = x !== undefined ? x : (Math.random() - 0.5) * 20;
+    const posY = 1 + Math.random() * 5;
+    const posZ = z;
     
-    const geometry = new THREE.BoxGeometry(width, height, depth);
+    // Randomize platform type for variety
+    const platformTypes = [
+      { 
+        geometry: new THREE.BoxGeometry(width, height, depth),
+        yOffset: 0,
+        shape: 'box'
+      },
+      { 
+        geometry: new THREE.CylinderGeometry(width/2, width/2, height, 16),
+        yOffset: 0,
+        shape: 'cylinder'
+      },
+      { 
+        geometry: new THREE.SphereGeometry(width/2, 16, 16),
+        yOffset: -width/4, // Adjust to make top of sphere flat with ground
+        shape: 'sphere'
+      }
+    ];
+    
+    // Select platform type - mostly boxes but some special shapes
+    const platformType = Math.random() > 0.7 ? 
+                        platformTypes[Math.floor(Math.random() * platformTypes.length)] : 
+                        platformTypes[0]; // 70% boxes, 30% special shapes
+    
+    // Create the platform with selected geometry
+    const geometry = platformType.geometry;
     const material = new THREE.MeshStandardMaterial({ 
       color: currentTheme.platformColor,
       roughness: 0.7,
@@ -1061,20 +1424,33 @@ export default class MultiplayerPlatformer {
     });
     
     const platform = new THREE.Mesh(geometry, material);
-    platform.position.set(x, y, z);
+    platform.position.set(posX, posY + platformType.yOffset, posZ);
     platform.receiveShadow = true;
     platform.castShadow = true;
     
-    // Store platform data for recycling
+    // Small chance for unique platform colors
+    if (Math.random() > 0.8) {
+      // Special colored platform
+      platform.material.color.set(
+        currentTheme.decorationColors[
+          Math.floor(Math.random() * currentTheme.decorationColors.length)
+        ]
+      );
+    }
+    
+    // Store platform data
     platform.userData = {
-      segmentType: 'platform',
-      zPosition: z,
-      originalY: y,
+      type: 'platform',
+      isCollidable: true,
+      shape: platformType.shape,
+      zPosition: posZ,
+      originalY: posY,
       movingPlatform: Math.random() > 0.6, // 40% chance to be a moving platform
       movementAmplitude: Math.random() * 1.5,
       movementFrequency: 0.02 + Math.random() * 0.02,
       movementPhase: Math.random() * Math.PI * 2,
-      movementAxis: Math.random() > 0.5 ? 'x' : 'y' // Move horizontally or vertically
+      movementAxis: Math.random() > 0.7 ? 'y' : 'x', // Mostly horizontal movement
+      platformId: `platform_${this.platforms.length}_${Math.floor(Math.random() * 1000)}`
     };
     
     this.platforms.push(platform);
@@ -1090,7 +1466,86 @@ export default class MultiplayerPlatformer {
       this.generateNPCForPlatform(platform);
     }
     
+    // Add special climbing elements to some platforms
+    if (Math.random() > 0.9) { // 10% chance to add climbing elements
+      this.addClimbingElementsToPlatform(platform);
+    }
+    
     return platform;
+  }
+  
+  // Add climbing elements to some platforms
+  addClimbingElementsToPlatform(platform) {
+    // Only add to platforms that are big enough
+    if (!platform.geometry.parameters || 
+        (platform.geometry.parameters.width && platform.geometry.parameters.width < 3)) {
+      return;
+    }
+    
+    const platformSize = platform.geometry.parameters.width || 2;
+    const pillarCount = Math.floor(Math.random() * 3) + 1; // 1-3 pillars
+    
+    for (let i = 0; i < pillarCount; i++) {
+      // Calculate position offset
+      const angle = (i / pillarCount) * Math.PI * 2;
+      const radius = platformSize * 0.4;
+      const offsetX = Math.cos(angle) * radius;
+      const offsetZ = Math.sin(angle) * radius;
+      
+      // Create pillar
+      const pillarHeight = 2 + Math.random() * 4;
+      const pillarGeometry = new THREE.CylinderGeometry(0.2, 0.2, pillarHeight, 8);
+      const pillarMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8b4513,
+        roughness: 0.8
+      });
+      
+      const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
+      pillar.position.set(
+        platform.position.x + offsetX,
+        platform.position.y + pillarHeight/2,
+        platform.position.z + offsetZ
+      );
+      pillar.castShadow = true;
+      
+      pillar.userData = {
+        type: 'pillar',
+        isCollidable: true,
+        parentPlatform: platform.userData.platformId
+      };
+      
+      this.scene.add(pillar);
+      
+      // Create a platform at the top of the pillar
+      const topPlatformSize = 1.5;
+      const topPlatformGeometry = new THREE.BoxGeometry(topPlatformSize, 0.2, topPlatformSize);
+      const topPlatformMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8b4513,
+        roughness: 0.7
+      });
+      
+      const topPlatform = new THREE.Mesh(topPlatformGeometry, topPlatformMaterial);
+      topPlatform.position.set(
+        pillar.position.x,
+        pillar.position.y + pillarHeight/2 + 0.1,
+        pillar.position.z
+      );
+      topPlatform.receiveShadow = true;
+      topPlatform.castShadow = true;
+      
+      topPlatform.userData = {
+        type: 'platform',
+        isCollidable: true
+      };
+      
+      this.platforms.push(topPlatform);
+      this.scene.add(topPlatform);
+      
+      // Add coin on top of pillar platform
+      if (Math.random() > 0.3) {
+        this.generateCoinsForPlatform(topPlatform);
+      }
+    }
   }
   
   generateDecorations() {
@@ -2848,49 +3303,131 @@ export default class MultiplayerPlatformer {
     this.handleRespawning(playerZ);
   }
   
+  // Check and expand world in all directions as player moves
   extendWorld() {
-    // Generate new ground segments
-    const lastSegmentZ = this.generatedZ;
-    const newSegmentZ = lastSegmentZ - 50; // Create a new segment 50 units further
+    // Only proceed if player exists
+    if (!this.playerMesh) return;
     
-    // Create new ground segment
-    const groundGeometry = new THREE.BoxGeometry(50, 1, 50);
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
-      color: this.themeProperties[this.currentTheme].groundColor,
-      roughness: 0.8,
-      metalness: 0.2
+    // Get player position
+    const playerPos = this.playerMesh.position;
+    
+    // Convert player position to grid coordinates
+    const gridX = Math.floor(playerPos.x / this.zoneSize);
+    const gridZ = Math.floor(playerPos.z / this.zoneSize);
+    
+    // Check for nearby zones that need to be generated
+    // Generate zones in a square around the player's current zone
+    const generationRadius = 2; // Generate zones 2 spaces out from player
+    
+    for (let x = gridX - generationRadius; x <= gridX + generationRadius; x++) {
+      for (let z = gridZ - generationRadius; z <= gridZ + generationRadius; z++) {
+        // Generate this zone if it doesn't exist yet
+        const zoneKey = `${x},${z}`;
+        if (!this.exploredZones.has(zoneKey)) {
+          console.log(`Generating new zone at ${zoneKey}`);
+          this.generateWorldZone(x, z);
+          
+          // Randomly add special features to some new zones
+          if (Math.random() < 0.1) { // 10% chance for special features
+            if (Math.random() < 0.5) {
+              // Add climbing structure
+              this.generateClimbingStructure(x * this.zoneSize, z * this.zoneSize);
+            } else {
+              // Add jump challenge
+              this.generateJumpChallengeArea(x * this.zoneSize, z * this.zoneSize);
+            }
+          }
+        }
+      }
+    }
+    
+    // Chance to add a random power-up somewhere in the player's current zone
+    if (Math.random() < 0.02) { // 2% chance per update
+      const powerUpX = playerPos.x + (Math.random() - 0.5) * this.zoneSize * 0.7;
+      const powerUpZ = playerPos.z + (Math.random() - 0.5) * this.zoneSize * 0.7;
+      const powerUpY = 1 + Math.random() * 2;
+      this.spawnRandomPowerUp(powerUpX, powerUpY, powerUpZ);
+    }
+    
+    // Cleanup far away zones to save memory
+    this.cleanupDistantZones(gridX, gridZ);
+  }
+  
+  // Add this helper method to clean up zones that are far from the player
+  cleanupDistantZones(playerGridX, playerGridZ) {
+    const cleanupDistance = 5; // Remove zones more than 5 grid spaces away
+    
+    // Check all ground segments
+    const segmentsToRemove = [];
+    this.groundSegments.forEach((segment, index) => {
+      if (!segment.userData || !segment.userData.gridX || !segment.userData.gridZ) return;
+      
+      const { gridX, gridZ } = segment.userData;
+      const distanceX = Math.abs(gridX - playerGridX);
+      const distanceZ = Math.abs(gridZ - playerGridZ);
+      
+      // If segment is too far away, mark for removal
+      if (distanceX > cleanupDistance || distanceZ > cleanupDistance) {
+        segmentsToRemove.push(index);
+        
+        // Remove zone from explored zones set
+        const zoneKey = `${gridX},${gridZ}`;
+        this.exploredZones.delete(zoneKey);
+        
+        // Remove the segment from the scene
+        this.scene.remove(segment);
+      }
     });
     
-    const groundSegment = new THREE.Mesh(groundGeometry, groundMaterial);
-    groundSegment.position.set(0, -0.5, newSegmentZ - 25); // Center the segment
-    groundSegment.receiveShadow = true;
-    
-    // Assign segment data
-    groundSegment.userData = {
-      segmentType: 'ground',
-      zIndex: newSegmentZ,
-    };
-    
-    this.groundSegments.push(groundSegment);
-    this.scene.add(groundSegment);
-    
-    // Create new platforms in the new segment
-    const platformCount = 1 + Math.floor(Math.random() * 3); // 1-3 platforms per segment
-    for (let i = 0; i < platformCount; i++) {
-      const z = newSegmentZ + Math.random() * 40; // Random position within segment
-      this.generatePlatform(z);
+    // Remove marked segments from array (in reverse order to avoid index issues)
+    for (let i = segmentsToRemove.length - 1; i >= 0; i--) {
+      this.groundSegments.splice(segmentsToRemove[i], 1);
     }
     
-    // Create decorations in the new segment
-    const decorationCount = 2 + Math.floor(Math.random() * 4); // 2-5 decorations per segment
-    for (let i = 0; i < decorationCount; i++) {
-      const x = (Math.random() - 0.5) * 40;
-      const z = newSegmentZ + Math.random() * 50;
-      this.generateDecoration(x, z);
+    // Also clean up decorations and platforms that are too far away
+    // For platforms
+    const distantPlatforms = [];
+    this.platforms.forEach((platform, index) => {
+      if (!platform.position) return;
+      
+      const platformGridX = Math.floor(platform.position.x / this.zoneSize);
+      const platformGridZ = Math.floor(platform.position.z / this.zoneSize);
+      
+      const distanceX = Math.abs(platformGridX - playerGridX);
+      const distanceZ = Math.abs(platformGridZ - playerGridZ);
+      
+      if (distanceX > cleanupDistance || distanceZ > cleanupDistance) {
+        distantPlatforms.push(index);
+        this.scene.remove(platform);
+      }
+    });
+    
+    // Remove distant platforms
+    for (let i = distantPlatforms.length - 1; i >= 0; i--) {
+      this.platforms.splice(distantPlatforms[i], 1);
     }
     
-    // Update the furthest generated point
-    this.generatedZ = newSegmentZ;
+    // For decorations
+    const distantDecorations = [];
+    this.decorations.forEach((decoration, index) => {
+      if (!decoration.position) return;
+      
+      const decorationGridX = Math.floor(decoration.position.x / this.zoneSize);
+      const decorationGridZ = Math.floor(decoration.position.z / this.zoneSize);
+      
+      const distanceX = Math.abs(decorationGridX - playerGridX);
+      const distanceZ = Math.abs(decorationGridZ - playerGridZ);
+      
+      if (distanceX > cleanupDistance || distanceZ > cleanupDistance) {
+        distantDecorations.push(index);
+        this.scene.remove(decoration);
+      }
+    });
+    
+    // Remove distant decorations
+    for (let i = distantDecorations.length - 1; i >= 0; i--) {
+      this.decorations.splice(distantDecorations[i], 1);
+    }
   }
   
   changeWorldTheme() {

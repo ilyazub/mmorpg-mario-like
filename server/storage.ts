@@ -116,9 +116,10 @@ export class MemStorage implements IStorage {
   
   async createWorldObstacle(obstacle: InsertWorldObstacle): Promise<WorldObstacle> {
     const id = this.obstacleId++;
-    const newObstacle = {
+    const newObstacle: WorldObstacle = {
       ...obstacle,
-      id
+      id,
+      isCrushed: obstacle.isCrushed || false
     };
     
     const worldObstacles = this.worldObstacles.get(obstacle.worldId) || [];
@@ -129,8 +130,9 @@ export class MemStorage implements IStorage {
   }
   
   async updateWorldObstacle(id: number, isCrushed: boolean): Promise<void> {
-    for (const [worldId, obstacles] of this.worldObstacles.entries()) {
-      const obstacleIndex = obstacles.findIndex(o => o.id === id);
+    for (const worldObstacleEntry of Array.from(this.worldObstacles.entries())) {
+      const [worldId, obstacles] = worldObstacleEntry;
+      const obstacleIndex = obstacles.findIndex((o: WorldObstacle) => o.id === id);
       if (obstacleIndex !== -1) {
         obstacles[obstacleIndex].isCrushed = isCrushed;
         this.worldObstacles.set(worldId, obstacles);
@@ -159,8 +161,9 @@ export class MemStorage implements IStorage {
   }
   
   async updateWorldElement(id: number, isActive: boolean): Promise<void> {
-    for (const [worldId, elements] of this.worldElements.entries()) {
-      const elementIndex = elements.findIndex(e => e.id === id);
+    for (const worldElementEntry of Array.from(this.worldElements.entries())) {
+      const [worldId, elements] = worldElementEntry;
+      const elementIndex = elements.findIndex((e: WorldElement) => e.id === id);
       if (elementIndex !== -1) {
         elements[elementIndex].isActive = isActive;
         this.worldElements.set(worldId, elements);
