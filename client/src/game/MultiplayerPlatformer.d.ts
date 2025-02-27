@@ -47,6 +47,11 @@ declare module '../game/MultiplayerPlatformer' {
     crushObstacle(obstacle: any): void;
     updateCrushableObstacles(): void;
     
+    // Visual effects
+    showPlayerDamageEffect(): void;
+    showEnemyAttackEffect(position: {x: number, y: number, z: number}): void;
+    showRemotePlayerAttack(position: {x: number, y: number, z: number}, color: number): void;
+    
     // Animation and rendering
     animate(): void;
     updatePlayerLabels(): void;

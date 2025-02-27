@@ -157,6 +157,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
+    // Handle player attack
+    socket.on("playerAttack", (data: { 
+      position: { x: number, y: number, z: number },
+      color: number 
+    }) => {
+      // Broadcast the attack to all other players
+      socket.broadcast.emit("playerAttack", {
+        id: socket.id,
+        position: data.position,
+        color: data.color
+      });
+    });
+    
     // Handle disconnection
     socket.on("disconnect", () => {
       console.log(`Player disconnected: ${socket.id}`);

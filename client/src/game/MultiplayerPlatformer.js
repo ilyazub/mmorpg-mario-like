@@ -89,6 +89,68 @@ export default class MultiplayerPlatformer {
       console.log(`Player left: ${playerId}`);
       this.removePlayer(playerId);
     });
+    
+    // Handle player attacks from other players
+    this.socket.on('playerAttack', (data) => {
+      console.log('Other player attacking at position:', data.position);
+      this.showRemotePlayerAttack(data.position, data.color);
+    });
+  }
+  
+  // Method to visualize other players' attacks
+  showRemotePlayerAttack(position, color) {
+    // Create a ring effect similar to the player's attack
+    const attackGeometry = new THREE.RingGeometry(0.2, 0.8, 16);
+    const attackMaterial = new THREE.MeshBasicMaterial({ 
+      color: color || 0xFFFFFF, 
+      transparent: true, 
+      opacity: 0.7,
+      side: THREE.DoubleSide
+    });
+    
+    const attackMesh = new THREE.Mesh(attackGeometry, attackMaterial);
+    attackMesh.position.set(position.x, position.y, position.z);
+    attackMesh.rotation.x = Math.PI / 2;
+    this.scene.add(attackMesh);
+    
+    // Add particles
+    const particleCount = 15;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleMaterial = new THREE.PointsMaterial({
+      color: color || 0xFFFFFF,
+      size: 0.08,
+      transparent: true,
+      opacity: 0.7
+    });
+    
+    const positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      positions[i3] = position.x + (Math.random() - 0.5) * 0.5;
+      positions[i3 + 1] = position.y + (Math.random() - 0.5) * 0.5;
+      positions[i3 + 2] = position.z + (Math.random() - 0.5) * 0.5;
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.scene.add(particles);
+    
+    // Animate the attack
+    let scale = 1;
+    const animateRemoteAttack = () => {
+      if (scale < 2) {
+        scale += 0.1;
+        attackMesh.scale.set(scale, scale, scale);
+        requestAnimationFrame(animateRemoteAttack);
+      }
+    };
+    animateRemoteAttack();
+    
+    // Remove after a short duration
+    setTimeout(() => {
+      this.scene.remove(attackMesh);
+      this.scene.remove(particles);
+    }, 300);
   }
   
   addPlayer(id, character, position) {
@@ -472,12 +534,16 @@ export default class MultiplayerPlatformer {
     console.log('Player attacking!');
     this.isAttacking = true;
     
-    // Create a visual effect for the attack
-    const attackGeometry = new THREE.SphereGeometry(0.6, 16, 16);
+    // Get player color for the attack effect
+    const playerColor = this.characterData ? this.getCharacterColor(this.characterData.name) : 0xFFD700;
+    
+    // Create a visual effect for the attack (shockwave-like)
+    const attackGeometry = new THREE.RingGeometry(0.2, 0.8, 16);
     const attackMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0xFFD700, 
+      color: playerColor, 
       transparent: true, 
-      opacity: 0.7 
+      opacity: 0.7,
+      side: THREE.DoubleSide
     });
     const attackMesh = new THREE.Mesh(attackGeometry, attackMaterial);
     
@@ -489,15 +555,60 @@ export default class MultiplayerPlatformer {
     
     attackMesh.position.copy(this.playerMesh.position);
     attackMesh.position.add(directionVector.multiplyScalar(1.2));
+    attackMesh.rotation.x = Math.PI / 2; // Make it face forward properly
     
     this.scene.add(attackMesh);
+    
+    // Create a particle effect for the attack
+    const particleCount = 20;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleMaterial = new THREE.PointsMaterial({
+      color: playerColor,
+      size: 0.1,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      positions[i3] = attackMesh.position.x + (Math.random() - 0.5) * 0.5;
+      positions[i3 + 1] = attackMesh.position.y + (Math.random() - 0.5) * 0.5;
+      positions[i3 + 2] = attackMesh.position.z + (Math.random() - 0.5) * 0.5;
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.scene.add(particles);
+    
+    // Emit socket event to notify other players about the attack
+    this.socket.emit('playerAttack', {
+      position: {
+        x: attackMesh.position.x,
+        y: attackMesh.position.y,
+        z: attackMesh.position.z
+      },
+      color: playerColor
+    });
+    
+    // Animate the attack effect (growing ring)
+    let scale = 1;
+    const animateAttack = () => {
+      if (scale < 2) {
+        scale += 0.1;
+        attackMesh.scale.set(scale, scale, scale);
+        requestAnimationFrame(animateAttack);
+      }
+    };
+    animateAttack();
     
     // Check for crushable obstacles in attack range
     this.checkAttackCollisions(attackMesh);
     
-    // Remove the attack effect after a short duration
+    // Remove the attack effects after a short duration
     setTimeout(() => {
       this.scene.remove(attackMesh);
+      this.scene.remove(particles);
       this.isAttacking = false;
       
       // Add cooldown
@@ -763,6 +874,12 @@ export default class MultiplayerPlatformer {
             this.playerMesh.position.z += knockbackDirection.z * 2;
             this.velocity.y = this.jumpForce * 0.5; // Small bounce
             
+            // Create damage effect (red flash)
+            this.showPlayerDamageEffect();
+            
+            // Create enemy attack visual
+            this.showEnemyAttackEffect(obstacle.position);
+            
             // Check for game over
             if (this.lives <= 0) {
               this.gameOver();
@@ -808,6 +925,111 @@ export default class MultiplayerPlatformer {
   }
   
   // Method to be called from outside to update settings
+  showPlayerDamageEffect() {
+    if (!this.playerMesh) return;
+    
+    // Store original materials
+    const originalMaterials = [];
+    this.playerMesh.traverse(child => {
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          originalMaterials.push(...child.material);
+          child.material = child.material.map(m => 
+            new THREE.MeshBasicMaterial({ color: 0xff0000 })
+          );
+        } else {
+          originalMaterials.push(child.material);
+          child.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        }
+      }
+    });
+    
+    // Create a screen flash effect
+    const flashGeometry = new THREE.PlaneGeometry(10, 10);
+    const flashMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xff0000, 
+      transparent: true, 
+      opacity: 0.3,
+      side: THREE.DoubleSide
+    });
+    const flashScreen = new THREE.Mesh(flashGeometry, flashMaterial);
+    flashScreen.position.copy(this.camera.position);
+    flashScreen.position.z -= 2; // Place it in front of the camera
+    flashScreen.quaternion.copy(this.camera.quaternion);
+    this.scene.add(flashScreen);
+    
+    // Restore original materials after a short time
+    setTimeout(() => {
+      this.playerMesh.traverse((child, i) => {
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material = originalMaterials.splice(0, child.material.length);
+          } else {
+            child.material = originalMaterials.shift();
+          }
+        }
+      });
+      
+      this.scene.remove(flashScreen);
+    }, 300);
+  }
+  
+  showEnemyAttackEffect(position) {
+    // Create an attack visual effect from the enemy
+    const attackGeometry = new THREE.RingGeometry(0.1, 0.5, 16);
+    const attackMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xff3333, 
+      transparent: true, 
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    
+    const attackMesh = new THREE.Mesh(attackGeometry, attackMaterial);
+    attackMesh.position.copy(position);
+    attackMesh.rotation.x = Math.PI / 2;
+    this.scene.add(attackMesh);
+    
+    // Add particles for the enemy attack
+    const particleCount = 15;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0xff3333,
+      size: 0.08,
+      transparent: true,
+      opacity: 0.7
+    });
+    
+    const positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      positions[i3] = position.x + (Math.random() - 0.5) * 0.5;
+      positions[i3 + 1] = position.y + (Math.random() - 0.5) * 0.5;
+      positions[i3 + 2] = position.z + (Math.random() - 0.5) * 0.5;
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.scene.add(particles);
+    
+    // Animate the attack outward
+    let scale = 1;
+    const animateAttack = () => {
+      if (scale < 2) {
+        scale += 0.15;
+        attackMesh.scale.set(scale, scale, scale);
+        attackMesh.material.opacity = 0.8 - (scale - 1) * 0.6;
+        requestAnimationFrame(animateAttack);
+      }
+    };
+    animateAttack();
+    
+    // Remove after a short duration
+    setTimeout(() => {
+      this.scene.remove(attackMesh);
+      this.scene.remove(particles);
+    }, 300);
+  }
+  
   updateSettings(settings) {
     if (settings.musicVolume !== undefined) {
       // Implement music volume control
