@@ -386,6 +386,10 @@ export default class MultiplayerPlatformer {
   }
   
   setupParallaxBackground() {
+    // Create color constants to avoid undefined color warnings
+    const DEFAULT_SKY_COLOR = 0x87CEEB;
+    const DEFAULT_HILL_COLOR = 0x228B22;
+    
     // Theme-specific configurations for parallax backgrounds
     const themeBackgrounds = {
       grassland: [
@@ -423,7 +427,8 @@ export default class MultiplayerPlatformer {
     };
 
     // Create parallax layers with matching current theme
-    const layers = themeBackgrounds[this.currentTheme] || themeBackgrounds.grassland;
+    const themeKey = this.currentTheme || 'grassland';
+    const layers = themeBackgrounds[themeKey] || themeBackgrounds.grassland;
     
     // Clear existing layers if needed
     this.parallaxLayers.forEach(layer => {
@@ -435,8 +440,10 @@ export default class MultiplayerPlatformer {
     layers.forEach((layer, index) => {
       // Create a large plane for each background layer
       const geometry = new THREE.PlaneGeometry(500, 150, 1, 1);
+      const layerColor = layer.color || (index < 3 ? DEFAULT_SKY_COLOR : DEFAULT_HILL_COLOR);
+      
       const material = new THREE.MeshBasicMaterial({
-        color: layer.color,
+        color: layerColor,
         transparent: index < 3, // Make sky layers transparent
         opacity: index < 3 ? 0.8 : 1, // Sky layers are slightly transparent
         side: THREE.DoubleSide
@@ -548,6 +555,10 @@ export default class MultiplayerPlatformer {
     const layerIndex = this.parallaxLayers.findIndex(layer => layer.mesh === mesh);
     if (layerIndex === -1) return;
     
+    // Default colors if we can't find a target color
+    const DEFAULT_SKY_COLOR = 0x87CEEB;
+    const DEFAULT_HILL_COLOR = 0x228B22;
+    
     // Get appropriate color from theme
     const themeColors = {
       grassland: [0x87CEEB, 0xADD8E6, 0xB0E0E6, 0x6B8E23, 0x556B2F, 0x228B22],
@@ -556,7 +567,15 @@ export default class MultiplayerPlatformer {
       lava: [0x800000, 0xA52A2A, 0xCD5C5C, 0x8B0000, 0xFF4500, 0xFF6347]
     };
     
-    const targetColor = new THREE.Color(themeColors[this.currentTheme][layerIndex] || 0xFFFFFF);
+    // Get the theme-specific colors or fallback to grassland
+    const themeKey = this.currentTheme || 'grassland';
+    const themeColorArray = themeColors[themeKey] || themeColors.grassland;
+    
+    // Get the target color or default by layer type
+    const defaultColor = layerIndex < 3 ? DEFAULT_SKY_COLOR : DEFAULT_HILL_COLOR;
+    const colorValue = themeColorArray[layerIndex] || defaultColor;
+    
+    const targetColor = new THREE.Color(colorValue);
     
     // Smoothly transition to the target color
     const currentColor = mesh.material.color;

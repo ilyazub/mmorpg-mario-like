@@ -72,6 +72,9 @@ declare class MultiplayerPlatformer implements MultiplayerPlatformerInterface {
   characterData: Character | null;
   isAttacking: boolean;
   attackCooldown: number;
+  parallaxLayers: ParallaxLayer[];
+  themeChanged: boolean;
+  currentTheme: string;
   
   selectCharacter(character: Character): void;
   startGame(): void;
@@ -92,6 +95,11 @@ declare class MultiplayerPlatformer implements MultiplayerPlatformerInterface {
   
   crushObstacle(obstacle: any): void;
   updateCrushableObstacles(): void;
+  
+  setupParallaxBackground(): void;
+  updateParallaxLayers(): void;
+  addTerrainShapeToLayer(layerMesh: any, layerIndex: number): void;
+  updateLayerThemeColors(mesh: any): void;
   
   showPlayerDamageEffect(): void;
   showEnemyAttackEffect(position: {x: number, y: number, z: number}): void;

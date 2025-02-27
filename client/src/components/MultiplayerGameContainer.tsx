@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
-import MultiplayerPlatformer from '../game/MultiplayerPlatformer';
+// @ts-ignore - Using JS module without type definitions
+import MultiplayerPlatformer from '../game/MultiplayerPlatformer.js';
 import { Character } from '../game/engine';
 
 export default function MultiplayerGameContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const gameRef = useRef<any>(null);
+  const gameRef = useRef<MultiplayerPlatformerInterface | null>(null);
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
