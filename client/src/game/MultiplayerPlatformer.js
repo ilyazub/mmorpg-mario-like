@@ -2535,6 +2535,9 @@ export default class MultiplayerPlatformer {
     // Check crushable obstacle collisions
     this.checkCrushableObstacleCollisions();
     
+    // Check collisions with trees and decorative objects
+    this.checkDecorationCollisions();
+    
     // Update procedural world generation
     if (this.playerMesh) {
       this.updateProceduralWorld();
@@ -3199,6 +3202,98 @@ export default class MultiplayerPlatformer {
         }
       }
     }
+  }
+  
+  checkDecorationCollisions() {
+    if (!this.playerMesh || !this.isRunning) return;
+    
+    const playerBox = new THREE.Box3().setFromObject(this.playerMesh);
+    // Slightly reduce the player collision box to allow for some forgiveness
+    playerBox.min.add(new THREE.Vector3(0.1, 0, 0.1));
+    playerBox.max.sub(new THREE.Vector3(0.1, 0, 0.1));
+    
+    // Check collisions with all decorations (trees, rocks, etc.)
+    for (const decoration of this.decorations) {
+      if (!decoration.userData.isCollidable) continue;
+      
+      // Create a bounding box for the decoration
+      const decorationBox = new THREE.Box3().setFromObject(decoration);
+      
+      // Check if player intersects with decoration
+      if (playerBox.intersectsBox(decorationBox)) {
+        // Calculate the center of both objects to determine push direction
+        const playerCenter = new THREE.Vector3();
+        playerBox.getCenter(playerCenter);
+        
+        const decorationCenter = new THREE.Vector3();
+        decorationBox.getCenter(decorationCenter);
+        
+        // Calculate direction to push player away from decoration
+        const pushDirection = new THREE.Vector3();
+        pushDirection.subVectors(playerCenter, decorationCenter).normalize();
+        
+        // Push player away from decoration (only in X and Z directions)
+        this.playerMesh.position.x += pushDirection.x * 0.2;
+        this.playerMesh.position.z += pushDirection.z * 0.2;
+        
+        // Log the collision for debugging
+        if (!decoration.userData.lastCollisionTime || 
+            Date.now() - decoration.userData.lastCollisionTime > 1000) {
+          console.log(`Collision with ${decoration.userData.type} decoration!`);
+          decoration.userData.lastCollisionTime = Date.now();
+          
+          // Play collision sound only occasionally to avoid sound spam
+          this.playSound('bump');
+          
+          // Add some visual feedback - make the decoration wiggle
+          this.triggerDecorationWiggle(decoration);
+          
+          // Tell server about the collision
+          if (this.socket) {
+            this.socket.emit('decorationCollision', {
+              decorationId: decoration.userData.decorationId,
+              position: decoration.position,
+              type: decoration.userData.type
+            });
+          }
+        }
+      }
+    }
+  }
+  
+  triggerDecorationWiggle(decoration) {
+    // Save original rotation
+    if (!decoration.userData.originalRotation) {
+      decoration.userData.originalRotation = {
+        x: decoration.rotation.x,
+        y: decoration.rotation.y,
+        z: decoration.rotation.z
+      };
+    }
+    
+    // Create a wiggle animation
+    const originalRotation = decoration.userData.originalRotation;
+    let wiggleTime = 0;
+    const wiggleDuration = 20;
+    const wiggleAmount = 0.05;
+    
+    const wiggleAnimation = () => {
+      wiggleTime++;
+      
+      decoration.rotation.x = originalRotation.x + Math.sin(wiggleTime * 0.4) * wiggleAmount;
+      decoration.rotation.z = originalRotation.z + Math.sin(wiggleTime * 0.5) * wiggleAmount;
+      
+      if (wiggleTime < wiggleDuration) {
+        requestAnimationFrame(wiggleAnimation);
+      } else {
+        // Reset rotation
+        decoration.rotation.x = originalRotation.x;
+        decoration.rotation.z = originalRotation.z;
+      }
+    };
+    
+    // Start wiggle animation
+    wiggleAnimation();
   }
   
   crushObstacle(obstacle) {
