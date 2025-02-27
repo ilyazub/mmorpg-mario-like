@@ -11,6 +11,16 @@ export default class MultiplayerPlatformer {
     this.obstacles = []; // Store obstacles
     this.crushableObstacles = []; // Store crushable obstacles
     this.coins = []; // Store collectible coins
+    this.powerUps = []; // Store power-ups
+    
+    // Player power-up state
+    this.activeEffects = {
+      speedBoost: 0,      // Timer for speed boost (in frames)
+      scoreMultiplier: 1, // Current score multiplier
+      invincibility: 0,   // Timer for invincibility (in frames)
+      jumpBoost: 0,       // Timer for jump boost (in frames)
+      attackBoost: 0      // Timer for attack boost (in frames)
+    };
     
     // Socket.io connection
     this.socket = io();
@@ -1423,10 +1433,17 @@ export default class MultiplayerPlatformer {
     // Get player color for the attack effect
     const playerColor = this.characterData ? this.getCharacterColor(this.characterData.name) : 0xFFD700;
     
+    // Check if attack boost is active
+    const hasAttackBoost = this.activeEffects.attackBoost > 0;
+    const attackSize = hasAttackBoost ? 1.2 : 0.8; // Larger attack with boost
+    const attackRange = hasAttackBoost ? 1.8 : 1.2; // Longer range with boost
+    const attackDuration = hasAttackBoost ? 400 : 300; // Longer animation with boost
+    const attackCooldownTime = hasAttackBoost ? 15 : 20; // Shorter cooldown with boost
+    
     // Create a visual effect for the attack (shockwave-like)
-    const attackGeometry = new THREE.RingGeometry(0.2, 0.8, 16);
+    const attackGeometry = new THREE.RingGeometry(0.2, attackSize, 16);
     const attackMaterial = new THREE.MeshBasicMaterial({ 
-      color: playerColor, 
+      color: hasAttackBoost ? 0xFF0000 : playerColor, // Red for boosted attacks 
       transparent: true, 
       opacity: 0.7,
       side: THREE.DoubleSide
@@ -1440,17 +1457,17 @@ export default class MultiplayerPlatformer {
     }
     
     attackMesh.position.copy(this.playerMesh.position);
-    attackMesh.position.add(directionVector.multiplyScalar(1.2));
+    attackMesh.position.add(directionVector.multiplyScalar(attackRange));
     attackMesh.rotation.x = Math.PI / 2; // Make it face forward properly
     
     this.scene.add(attackMesh);
     
     // Create a particle effect for the attack
-    const particleCount = 20;
+    const particleCount = hasAttackBoost ? 30 : 20; // More particles with boost
     const particleGeometry = new THREE.BufferGeometry();
     const particleMaterial = new THREE.PointsMaterial({
-      color: playerColor,
-      size: 0.1,
+      color: hasAttackBoost ? 0xFF0000 : playerColor,
+      size: hasAttackBoost ? 0.15 : 0.1, // Larger particles with boost
       transparent: true,
       opacity: 0.8
     });
@@ -1458,14 +1475,45 @@ export default class MultiplayerPlatformer {
     const positions = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount; i++) {
       const i3 = i * 3;
-      positions[i3] = attackMesh.position.x + (Math.random() - 0.5) * 0.5;
-      positions[i3 + 1] = attackMesh.position.y + (Math.random() - 0.5) * 0.5;
-      positions[i3 + 2] = attackMesh.position.z + (Math.random() - 0.5) * 0.5;
+      positions[i3] = attackMesh.position.x + (Math.random() - 0.5) * (hasAttackBoost ? 0.8 : 0.5);
+      positions[i3 + 1] = attackMesh.position.y + (Math.random() - 0.5) * (hasAttackBoost ? 0.8 : 0.5);
+      positions[i3 + 2] = attackMesh.position.z + (Math.random() - 0.5) * (hasAttackBoost ? 0.8 : 0.5);
     }
     
     particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const particles = new THREE.Points(particleGeometry, particleMaterial);
     this.scene.add(particles);
+    
+    // Add additional effect for boosted attacks
+    if (hasAttackBoost) {
+      // Add a shockwave ring
+      const shockwaveGeometry = new THREE.RingGeometry(0.1, 0.3, 16);
+      const shockwaveMaterial = new THREE.MeshBasicMaterial({
+        color: 0xFF4500,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
+      });
+      const shockwave = new THREE.Mesh(shockwaveGeometry, shockwaveMaterial);
+      shockwave.position.copy(attackMesh.position);
+      shockwave.rotation.x = Math.PI / 2;
+      this.scene.add(shockwave);
+      
+      // Animate shockwave separately
+      let shockwaveScale = 1;
+      const animateShockwave = () => {
+        shockwaveScale += 0.2;
+        shockwave.scale.set(shockwaveScale, shockwaveScale, shockwaveScale);
+        shockwave.material.opacity = 0.9 - (shockwaveScale / 8);
+        
+        if (shockwaveScale < 8) {
+          requestAnimationFrame(animateShockwave);
+        } else {
+          this.scene.remove(shockwave);
+        }
+      };
+      animateShockwave();
+    }
     
     // Emit socket event to notify other players about the attack
     this.socket.emit('playerAttack', {
@@ -1474,14 +1522,17 @@ export default class MultiplayerPlatformer {
         y: attackMesh.position.y,
         z: attackMesh.position.z
       },
-      color: playerColor
+      color: hasAttackBoost ? 0xFF0000 : playerColor
     });
     
     // Animate the attack effect (growing ring)
     let scale = 1;
+    const maxScale = hasAttackBoost ? 3 : 2; // Larger max scale with boost
+    const scaleStep = hasAttackBoost ? 0.15 : 0.1; // Faster growth with boost
+    
     const animateAttack = () => {
-      if (scale < 2) {
-        scale += 0.1;
+      if (scale < maxScale) {
+        scale += scaleStep;
         attackMesh.scale.set(scale, scale, scale);
         requestAnimationFrame(animateAttack);
       }
@@ -1497,9 +1548,9 @@ export default class MultiplayerPlatformer {
       this.scene.remove(particles);
       this.isAttacking = false;
       
-      // Add cooldown
-      this.attackCooldown = 20;
-    }, 300);
+      // Add cooldown (shorter with attack boost)
+      this.attackCooldown = attackCooldownTime;
+    }, attackDuration);
   }
   
   checkAttackCollisions(attackMesh) {
@@ -1626,6 +1677,7 @@ export default class MultiplayerPlatformer {
     
     const playerBox = new THREE.Box3().setFromObject(this.playerMesh);
     
+    // Check coin collisions
     for (const coin of this.coins) {
       if (coin.userData.isCollected) continue;
       
@@ -1636,11 +1688,488 @@ export default class MultiplayerPlatformer {
         coin.userData.isCollected = true;
         coin.visible = false;
         
-        // Increase score
-        this.score += 10;
+        // Increase score with any active multiplier
+        const pointValue = 10 * this.activeEffects.scoreMultiplier;
+        this.score += pointValue;
+        
+        // Create floating score text
+        this.createScorePopup(coin.position, pointValue);
+        
         console.log('Score:', this.score);
         
         // Play sound (would be implemented here)
+      }
+    }
+    
+    // Check power-up collisions
+    for (const powerUp of this.powerUps) {
+      if (powerUp.userData.isCollected) continue;
+      
+      const powerUpBox = new THREE.Box3().setFromObject(powerUp);
+      
+      if (playerBox.intersectsBox(powerUpBox)) {
+        // Collect the power-up
+        powerUp.userData.isCollected = true;
+        powerUp.visible = false;
+        
+        // Apply the power-up effect
+        this.applyPowerUpEffect(powerUp.userData.type);
+        
+        // Create visual effect
+        this.createPowerUpEffect(powerUp.position, powerUp.userData.type);
+        
+        // Remove from scene after a delay
+        setTimeout(() => {
+          this.scene.remove(powerUp);
+          this.powerUps = this.powerUps.filter(p => p !== powerUp);
+        }, 500);
+      }
+    }
+  }
+  
+  createScorePopup(position, value) {
+    // Create a score popup text that floats up and fades out
+    const textCanvas = document.createElement('canvas');
+    const context = textCanvas.getContext('2d');
+    textCanvas.width = 128;
+    textCanvas.height = 64;
+    
+    // Set text style
+    context.font = 'bold 24px Arial';
+    context.fillStyle = value > 10 ? '#FFD700' : '#FFFFFF'; // Gold color for multiplied scores
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    
+    // Draw text with shadow
+    context.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    context.shadowBlur = 5;
+    context.fillText(`+${value}`, 64, 32);
+    
+    // Create a sprite using the canvas
+    const texture = new THREE.CanvasTexture(textCanvas);
+    const material = new THREE.SpriteMaterial({ 
+      map: texture,
+      transparent: true
+    });
+    const sprite = new THREE.Sprite(material);
+    
+    // Position the sprite at the coin position, slightly offset
+    sprite.position.copy(position);
+    sprite.position.y += 0.5;
+    
+    // Make the sprite face the camera
+    sprite.scale.set(1, 0.5, 1);
+    
+    this.scene.add(sprite);
+    
+    // Animate the sprite floating up and fading out
+    let time = 0;
+    const animate = () => {
+      time += 0.05;
+      sprite.position.y += 0.03;
+      sprite.material.opacity = 1 - (time / 1.5);
+      
+      if (time < 1.5) {
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(sprite);
+      }
+    };
+    
+    animate();
+  }
+  
+  spawnRandomPowerUp() {
+    // Define power-up types with their properties
+    const powerUpTypes = [
+      { 
+        type: 'speedBoost', 
+        color: 0x00FFFF, 
+        geometry: new THREE.OctahedronGeometry(0.4, 0),
+        duration: 300 // 5 seconds at 60fps
+      },
+      { 
+        type: 'jumpBoost', 
+        color: 0x00FF00, 
+        geometry: new THREE.TetrahedronGeometry(0.4),
+        duration: 600 // 10 seconds at 60fps
+      },
+      { 
+        type: 'scoreMultiplier', 
+        color: 0xFFD700, 
+        geometry: new THREE.DodecahedronGeometry(0.4, 0),
+        multiplier: 2, // 2x score
+        duration: 600 // 10 seconds at 60fps
+      },
+      { 
+        type: 'invincibility', 
+        color: 0xFF00FF, 
+        geometry: new THREE.IcosahedronGeometry(0.4, 0),
+        duration: 300 // 5 seconds at 60fps
+      },
+      { 
+        type: 'attackBoost', 
+        color: 0xFF0000, 
+        geometry: new THREE.BoxGeometry(0.4, 0.4, 0.4),
+        duration: 450 // 7.5 seconds at 60fps
+      }
+    ];
+    
+    // Select a random power-up type
+    const powerUpType = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+    
+    // Find a good position for the power-up (random but accessible)
+    let x, y, z;
+    
+    // Option 1: Place on a platform
+    if (this.platforms.length > 0 && Math.random() > 0.4) {
+      const platform = this.platforms[Math.floor(Math.random() * this.platforms.length)];
+      x = platform.position.x + (Math.random() - 0.5) * platform.geometry.parameters.width * 0.7;
+      y = platform.position.y + platform.geometry.parameters.height / 2 + 0.6;
+      z = platform.position.z;
+    } 
+    // Option 2: Place in air along the path
+    else {
+      // Place it somewhere ahead of the player but visible
+      if (this.playerMesh) {
+        z = this.playerMesh.position.z - 20 - Math.random() * 40;
+      } else {
+        z = -20 - Math.random() * 40;
+      }
+      x = (Math.random() - 0.5) * 15;
+      y = 1 + Math.random() * 3;
+    }
+    
+    // Create the power-up mesh
+    const material = new THREE.MeshStandardMaterial({ 
+      color: powerUpType.color,
+      emissive: powerUpType.color,
+      emissiveIntensity: 0.5,
+      metalness: 0.8,
+      roughness: 0.2
+    });
+    
+    const powerUp = new THREE.Mesh(powerUpType.geometry, material);
+    powerUp.position.set(x, y, z);
+    powerUp.castShadow = true;
+    
+    // Add a glow effect
+    const glowGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({ 
+      color: powerUpType.color,
+      transparent: true,
+      opacity: 0.3
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    powerUp.add(glow);
+    
+    // Store power-up data
+    powerUp.userData = {
+      type: powerUpType.type,
+      duration: powerUpType.duration,
+      multiplier: powerUpType.multiplier,
+      isCollected: false,
+      originalY: y, // Store original Y for bobbing animation
+      zPosition: z
+    };
+    
+    this.powerUps.push(powerUp);
+    this.scene.add(powerUp);
+    
+    return powerUp;
+  }
+  
+  applyPowerUpEffect(powerUpType) {
+    console.log(`Applying power-up: ${powerUpType}`);
+    
+    // Apply different effects based on power-up type
+    switch (powerUpType) {
+      case 'speedBoost':
+        // Increase player speed
+        this.playerSpeed = 0.3; // Double speed
+        this.activeEffects.speedBoost = 300; // 5 seconds at 60fps
+        
+        // Create visual indication
+        if (this.playerMesh) {
+          const trail = new THREE.PointLight(0x00FFFF, 2, 5);
+          trail.position.copy(this.playerMesh.position);
+          trail.position.y -= 0.5;
+          this.scene.add(trail);
+          
+          // Remove after duration
+          setTimeout(() => {
+            this.scene.remove(trail);
+          }, 5000);
+        }
+        break;
+        
+      case 'jumpBoost':
+        // Increase jump force
+        this.jumpForce = 0.4; // Double jump height
+        this.activeEffects.jumpBoost = 600; // 10 seconds at 60fps
+        
+        // Visual effect
+        if (this.playerMesh) {
+          const particles = new THREE.Group();
+          for (let i = 0; i < 5; i++) {
+            const particle = new THREE.Mesh(
+              new THREE.SphereGeometry(0.1, 8, 8),
+              new THREE.MeshBasicMaterial({ color: 0x00FF00, transparent: true, opacity: 0.7 })
+            );
+            particle.position.set(
+              (Math.random() - 0.5) * 0.5,
+              (Math.random() - 0.5) * 0.5,
+              (Math.random() - 0.5) * 0.5
+            );
+            particles.add(particle);
+          }
+          this.playerMesh.add(particles);
+          
+          // Remove after duration
+          setTimeout(() => {
+            this.playerMesh.remove(particles);
+          }, 10000);
+        }
+        break;
+        
+      case 'scoreMultiplier':
+        // Double score for collecting coins
+        this.activeEffects.scoreMultiplier = 2;
+        this.activeEffects.scoreMultiplierTimer = 600; // 10 seconds at 60fps
+        
+        // Visual effect - gold aura
+        if (this.playerMesh) {
+          const aura = new THREE.PointLight(0xFFD700, 1, 3);
+          this.playerMesh.add(aura);
+          
+          // Remove after duration
+          setTimeout(() => {
+            this.playerMesh.remove(aura);
+          }, 10000);
+        }
+        break;
+        
+      case 'invincibility':
+        // Make player invincible
+        this.activeEffects.invincibility = 300; // 5 seconds at 60fps
+        
+        // Visual effect - star particles
+        if (this.playerMesh) {
+          const stars = new THREE.Group();
+          this.playerMesh.add(stars);
+          
+          // Star animation function
+          const animateStars = () => {
+            // Remove old stars
+            while (stars.children.length > 0) {
+              stars.remove(stars.children[0]);
+            }
+            
+            // Create new stars if still invincible
+            if (this.activeEffects.invincibility > 0) {
+              for (let i = 0; i < 3; i++) {
+                const star = new THREE.Mesh(
+                  new THREE.BoxGeometry(0.2, 0.2, 0.2),
+                  new THREE.MeshBasicMaterial({ 
+                    color: Math.random() > 0.5 ? 0xFFFFFF : 0xFFD700,
+                    transparent: true,
+                    opacity: 0.8
+                  })
+                );
+                star.position.set(
+                  (Math.random() - 0.5) * 1.5,
+                  (Math.random() - 0.5) * 1.5,
+                  (Math.random() - 0.5) * 1.5
+                );
+                stars.add(star);
+              }
+              requestAnimationFrame(animateStars);
+            } else {
+              this.playerMesh.remove(stars);
+            }
+          };
+          
+          animateStars();
+        }
+        break;
+        
+      case 'attackBoost':
+        // Increase attack power
+        this.activeEffects.attackBoost = 450; // 7.5 seconds at 60fps
+        
+        // Visual effect - red glow
+        if (this.playerMesh) {
+          const attackAura = new THREE.PointLight(0xFF0000, 1, 3);
+          this.playerMesh.add(attackAura);
+          
+          // Enhance player appearance
+          if (this.playerMesh.material) {
+            const originalColor = this.playerMesh.material.color.clone();
+            this.playerMesh.material.emissive = new THREE.Color(0xFF0000);
+            this.playerMesh.material.emissiveIntensity = 0.3;
+            
+            // Reset after duration
+            setTimeout(() => {
+              this.playerMesh.material.emissive = new THREE.Color(0x000000);
+              this.playerMesh.material.emissiveIntensity = 0;
+              this.playerMesh.remove(attackAura);
+            }, 7500);
+          }
+        }
+        break;
+    }
+  }
+  
+  createPowerUpEffect(position, type) {
+    // Create a visual effect when collecting a power-up
+    let color;
+    switch (type) {
+      case 'speedBoost': color = 0x00FFFF; break;
+      case 'jumpBoost': color = 0x00FF00; break;
+      case 'scoreMultiplier': color = 0xFFD700; break;
+      case 'invincibility': color = 0xFF00FF; break;
+      case 'attackBoost': color = 0xFF0000; break;
+      default: color = 0xFFFFFF;
+    }
+    
+    // Create explosion effect
+    const particleCount = 20;
+    const particles = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const particle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15, 8, 8),
+        new THREE.MeshBasicMaterial({
+          color: color,
+          transparent: true,
+          opacity: 0.8
+        })
+      );
+      
+      // Set initial position
+      particle.position.copy(position);
+      
+      // Set random velocity
+      particle.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.3,
+        (Math.random() - 0.5) * 0.3,
+        (Math.random() - 0.5) * 0.3
+      );
+      
+      this.scene.add(particle);
+      particles.push(particle);
+    }
+    
+    // Create a ring effect
+    const ringGeometry = new THREE.TorusGeometry(0.5, 0.1, 8, 24);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.7
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.copy(position);
+    this.scene.add(ring);
+    
+    // Animate the explosion
+    let time = 0;
+    const animateExplosion = () => {
+      time += 0.05;
+      
+      // Update particles
+      particles.forEach(particle => {
+        particle.position.add(particle.velocity);
+        particle.material.opacity = 0.8 - time * 0.8;
+        particle.scale.multiplyScalar(0.97);
+      });
+      
+      // Update ring
+      ring.scale.set(1 + time, 1 + time, 1 + time);
+      ring.material.opacity = 0.7 - time * 0.7;
+      
+      if (time < 1) {
+        requestAnimationFrame(animateExplosion);
+      } else {
+        // Remove all particles
+        particles.forEach(particle => {
+          this.scene.remove(particle);
+        });
+        this.scene.remove(ring);
+      }
+    };
+    
+    animateExplosion();
+    
+    // Create a text popup with the power-up name
+    const textCanvas = document.createElement('canvas');
+    const context = textCanvas.getContext('2d');
+    textCanvas.width = 256;
+    textCanvas.height = 64;
+    
+    // Set text style
+    context.font = 'bold 20px Arial';
+    context.fillStyle = '#FFFFFF';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    
+    // Format power-up name
+    let powerUpName = type.replace(/([A-Z])/g, ' $1').trim();
+    powerUpName = powerUpName.charAt(0).toUpperCase() + powerUpName.slice(1);
+    
+    // Draw text with shadow
+    context.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    context.shadowBlur = 5;
+    context.fillText(powerUpName, 128, 32);
+    
+    // Create a sprite using the canvas
+    const texture = new THREE.CanvasTexture(textCanvas);
+    const material = new THREE.SpriteMaterial({ 
+      map: texture,
+      transparent: true
+    });
+    const sprite = new THREE.Sprite(material);
+    
+    // Position the sprite above the power-up
+    sprite.position.copy(position);
+    sprite.position.y += 1;
+    
+    // Make the sprite face the camera
+    sprite.scale.set(2, 0.5, 1);
+    
+    this.scene.add(sprite);
+    
+    // Animate the sprite floating up and fading out
+    let spriteTime = 0;
+    const animateSprite = () => {
+      spriteTime += 0.03;
+      sprite.position.y += 0.03;
+      sprite.material.opacity = 1 - spriteTime;
+      
+      if (spriteTime < 1) {
+        requestAnimationFrame(animateSprite);
+      } else {
+        this.scene.remove(sprite);
+      }
+    };
+    
+    animateSprite();
+  }
+  
+  updatePowerUps() {
+    // Update power-ups (remove collected ones, animate active ones)
+    for (let i = this.powerUps.length - 1; i >= 0; i--) {
+      const powerUp = this.powerUps[i];
+      
+      // Remove collected power-ups
+      if (powerUp.userData.isCollected && !powerUp.visible) {
+        this.powerUps.splice(i, 1);
+        continue;
+      }
+      
+      // Check if power-up is too far away (behind player)
+      if (this.playerMesh && powerUp.position.z > this.playerMesh.position.z + this.respawnDistance) {
+        this.scene.remove(powerUp);
+        this.powerUps.splice(i, 1);
       }
     }
   }
@@ -1694,6 +2223,15 @@ export default class MultiplayerPlatformer {
       this.attackCooldown--;
     }
     
+    // Update power-ups and their effects
+    this.updatePowerUps();
+    this.updateEffectsTimers();
+    
+    // Spawn power-ups occasionally (1% chance per frame when running)
+    if (this.isRunning && Math.random() < 0.01) {
+      this.spawnRandomPowerUp();
+    }
+    
     // Rotate coins for visual effect with their individual speeds
     this.coins.forEach(coin => {
       if (!coin.userData.isCollected) {
@@ -1701,8 +2239,115 @@ export default class MultiplayerPlatformer {
       }
     });
     
+    // Rotate power-ups for visual effect
+    this.powerUps.forEach(powerUp => {
+      if (!powerUp.userData.isCollected) {
+        powerUp.rotation.y += 0.03;
+        // Bobbing up and down animation
+        powerUp.position.y = powerUp.userData.originalY + Math.sin(now * 0.003) * 0.15;
+      }
+    });
+    
     // Render the scene
     this.renderer.render(this.scene, this.camera);
+  }
+  
+  updateEffectsTimers() {
+    // Update active effects timers
+    if (this.activeEffects.speedBoost > 0) {
+      this.activeEffects.speedBoost--;
+      
+      // Add speed boost particles if active
+      if (this.playerMesh && this.activeEffects.speedBoost % 5 === 0) {
+        this.createSpeedBoostTrail();
+      }
+      
+      // Reset to normal speed when effect expires
+      if (this.activeEffects.speedBoost === 0) {
+        this.playerSpeed = 0.15; // Reset to normal speed
+        console.log('Speed boost expired!');
+      }
+    }
+    
+    if (this.activeEffects.jumpBoost > 0) {
+      this.activeEffects.jumpBoost--;
+      
+      // Reset jump power when effect expires
+      if (this.activeEffects.jumpBoost === 0) {
+        this.jumpForce = 0.2; // Reset to normal jump force
+        console.log('Jump boost expired!');
+      }
+    }
+    
+    if (this.activeEffects.invincibility > 0) {
+      this.activeEffects.invincibility--;
+      
+      // Make player flash when invincible
+      if (this.playerMesh) {
+        this.playerMesh.visible = Math.floor(Date.now() / 100) % 2 === 0;
+      }
+      
+      // Reset visibility when effect expires
+      if (this.activeEffects.invincibility === 0 && this.playerMesh) {
+        this.playerMesh.visible = true;
+        console.log('Invincibility expired!');
+      }
+    }
+    
+    if (this.activeEffects.attackBoost > 0) {
+      this.activeEffects.attackBoost--;
+      
+      // Reset attack power when effect expires
+      if (this.activeEffects.attackBoost === 0) {
+        console.log('Attack boost expired!');
+      }
+    }
+    
+    // Score multiplier duration
+    if (this.activeEffects.scoreMultiplier > 1) {
+      this.activeEffects.scoreMultiplierTimer = this.activeEffects.scoreMultiplierTimer || 300;
+      this.activeEffects.scoreMultiplierTimer--;
+      
+      if (this.activeEffects.scoreMultiplierTimer <= 0) {
+        this.activeEffects.scoreMultiplier = 1;
+        console.log('Score multiplier expired!');
+      }
+    }
+  }
+  
+  createSpeedBoostTrail() {
+    if (!this.playerMesh) return;
+    
+    // Create a trail particle at player's position
+    const particleGeometry = new THREE.SphereGeometry(0.1, 4, 4);
+    const particleMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x00FFFF, 
+      transparent: true, 
+      opacity: 0.7 
+    });
+    
+    const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+    
+    // Position slightly behind the player
+    particle.position.copy(this.playerMesh.position);
+    particle.position.z += 0.5; // Offset behind player
+    
+    this.scene.add(particle);
+    
+    // Animate the particle fade-out
+    let opacity = 0.7;
+    const fadeOutParticle = () => {
+      opacity -= 0.05;
+      if (opacity > 0) {
+        particle.material.opacity = opacity;
+        requestAnimationFrame(fadeOutParticle);
+      } else {
+        this.scene.remove(particle);
+      }
+    };
+    
+    // Start the fade animation
+    fadeOutParticle();
   }
   
   updateMovingPlatforms() {
