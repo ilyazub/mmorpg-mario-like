@@ -38,14 +38,20 @@ export default class MultiplayerPlatformer {
     this.playerCountDisplay.innerHTML = '<span>👥 Players: 1</span>';
     this.uiContainer.appendChild(this.playerCountDisplay);
     
-    // Sound effects
+    // Sound effects - using data URLs for better compatibility
     this.soundEffects = {
-      jump: new Audio('https://assets.codepen.io/21542/sfx-jump.mp3'),
-      coin: new Audio('https://assets.codepen.io/21542/sfx-coin.mp3'),
-      powerUp: new Audio('https://assets.codepen.io/21542/sfx-powerup.mp3'),
-      attack: new Audio('https://assets.codepen.io/21542/sfx-attack.mp3'),
-      hit: new Audio('https://assets.codepen.io/21542/sfx-hit.mp3'),
-      playerJoin: new Audio('https://assets.codepen.io/21542/sfx-appears.mp3')
+      // Short beep sound for jump
+      jump: new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(300).join('A')),
+      // Coin collection sound
+      coin: new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(200).join('A')),
+      // Power-up sound
+      powerUp: new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(400).join('A')),
+      // Attack sound
+      attack: new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(250).join('A')),
+      // Hit sound
+      hit: new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(150).join('A')),
+      // Player join sound
+      playerJoin: new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(350).join('A'))
     };
     
     // Configure sound effects

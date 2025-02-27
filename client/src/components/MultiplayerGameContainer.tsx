@@ -108,7 +108,7 @@ export default function MultiplayerGameContainer() {
             <div>Score: {score}</div>
             <div>Lives: {lives}</div>
             <div>Enemies: {gameRef.current?.crushableObstacles?.length || 0}</div>
-            <div>Players: {gameRef.current?.players?.size || 1}</div>
+            {/* Player count is now managed by the game engine's built-in UI */}
           </div>
         )}
         
