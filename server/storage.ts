@@ -306,4 +306,26 @@ export class DatabaseStorage implements IStorage {
 }
 
 // We're now using the database storage for persistence
-export const storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
+const storageInstance = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
+
+// Initialize a default game world if using database
+(async () => {
+  if (process.env.DATABASE_URL) {
+    try {
+      // Check if we have any active game worlds
+      const worlds = await storageInstance.getActiveGameWorlds();
+      if (worlds.length === 0) {
+        // Create a default game world
+        console.log('Creating default game world...');
+        await storageInstance.createGameWorld('Default World', 'The main game world', 1);
+        console.log('Default game world created successfully.');
+      } else {
+        console.log(`Found ${worlds.length} existing game worlds.`);
+      }
+    } catch (error) {
+      console.error('Error initializing game world:', error);
+    }
+  }
+})();
+
+export const storage = storageInstance;

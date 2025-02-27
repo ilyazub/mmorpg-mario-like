@@ -20,6 +20,8 @@ export default class MultiplayerPlatformer {
     this.exploredZones = new Set(); // Track which grid zones we've generated
     this.zoneSize = 50; // Size of each zone grid (50x50 units)
     this.generationRadius = 3; // Generate zones 3 spaces out in each direction initially
+    this.unloadDistance = 150; // Distance before unloading objects (increased for better visibility)
+    this.visibleRadius = 100; // How far the player can see interactive objects
     
     // UI elements
     this.uiContainer = document.createElement('div');
@@ -1049,6 +1051,9 @@ export default class MultiplayerPlatformer {
     
     const worldX = gridX * this.zoneSize;
     const worldZ = gridZ * this.zoneSize;
+    
+    // Track this zone as explored
+    this.exploredZones.add(zoneKey);
     const currentTheme = this.themeProperties[this.currentTheme];
     
     // Create ground segment for this zone
@@ -3440,7 +3445,7 @@ export default class MultiplayerPlatformer {
   
   // Add this helper method to clean up zones that are far from the player
   cleanupDistantZones(playerGridX, playerGridZ) {
-    const cleanupDistance = 5; // Remove zones more than 5 grid spaces away
+    const cleanupDistance = 8; // Increased from 5 to 8 grid spaces away
     
     // Check all ground segments
     const segmentsToRemove = [];
@@ -3452,7 +3457,8 @@ export default class MultiplayerPlatformer {
       const distanceZ = Math.abs(gridZ - playerGridZ);
       
       // If segment is too far away, mark for removal
-      if (distanceX > cleanupDistance || distanceZ > cleanupDistance) {
+      // Use Manhattan distance for better handling of diagonal zones
+      if (distanceX + distanceZ > cleanupDistance * 2) {
         segmentsToRemove.push(index);
         
         // Remove zone from explored zones set
