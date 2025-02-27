@@ -265,8 +265,88 @@ export default class MultiplayerPlatformer {
   }
   
   initCrushableObstacles() {
-    // Add crushable obstacles (like Goomba enemies in Mario)
-    const crushablePositions = [
+    // Define different NPC types with their properties
+    this.npcTypes = [
+      {
+        name: 'Goomba',
+        geometry: new THREE.BoxGeometry(0.8, 0.6, 0.8),
+        material: new THREE.MeshStandardMaterial({ 
+          color: 0x8B4513,  // Brown
+          roughness: 0.7,
+          metalness: 0.2
+        }),
+        speed: 0.03,
+        movementStyle: 'ground',
+        jumpHeight: 0,
+        strength: 1,
+        crushable: true
+      },
+      {
+        name: 'Koopa',
+        geometry: new THREE.CylinderGeometry(0.4, 0.6, 1.0, 8),
+        material: new THREE.MeshStandardMaterial({ 
+          color: 0x00AA00,  // Green
+          roughness: 0.7,
+          metalness: 0.2
+        }),
+        speed: 0.02,
+        movementStyle: 'ground',
+        jumpHeight: 0,
+        strength: 1,
+        crushable: true
+      },
+      {
+        name: 'Spiny',
+        geometry: new THREE.SphereGeometry(0.5, 16, 8),
+        material: new THREE.MeshStandardMaterial({ 
+          color: 0xDD2222,  // Red
+          roughness: 0.6,
+          metalness: 0.3
+        }),
+        speed: 0.04,
+        movementStyle: 'ground',
+        jumpHeight: 0,
+        strength: 2,
+        crushable: false // Can't be crushed by jumping
+      },
+      {
+        name: 'Paratroopa',
+        geometry: new THREE.ConeGeometry(0.5, 1.0, 8),
+        material: new THREE.MeshStandardMaterial({ 
+          color: 0x00AAAA,  // Teal
+          roughness: 0.7,
+          metalness: 0.2
+        }),
+        speed: 0.04,
+        movementStyle: 'flying',
+        jumpHeight: 2.0,
+        strength: 1,
+        crushable: true
+      },
+      {
+        name: 'Boo',
+        geometry: new THREE.SphereGeometry(0.6, 16, 8),
+        material: new THREE.MeshStandardMaterial({ 
+          color: 0xFFFFFF,  // White
+          transparent: true, 
+          opacity: 0.7,
+          roughness: 0.3,
+          metalness: 0.1
+        }),
+        speed: 0.02,
+        movementStyle: 'ghost',
+        jumpHeight: 1.5,
+        strength: 1,
+        crushable: false
+      }
+    ];
+    
+    // Create NPCs of different types
+    const npcCount = 15;
+    const positions = [];
+    
+    // Some pre-defined positions for important areas
+    const fixedPositions = [
       { x: 3, y: 0.5, z: -3 },
       { x: -3, y: 0.5, z: -5 },
       { x: 0, y: 0.5, z: -8 },
@@ -274,75 +354,180 @@ export default class MultiplayerPlatformer {
       { x: -5, y: 3.5, z: -5 }
     ];
     
-    crushablePositions.forEach((pos, index) => {
-      // Create body
-      const bodyGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-      const bodyMaterial = new THREE.MeshStandardMaterial({
-        color: 0x8B4513, // Brown
-        roughness: 0.7,
-        metalness: 0.2
+    // Add fixed positions
+    positions.push(...fixedPositions);
+    
+    // Add random positions for the rest
+    for (let i = fixedPositions.length; i < npcCount; i++) {
+      positions.push({
+        x: (Math.random() - 0.5) * 16,
+        y: 0.5, // Will be adjusted based on NPC type
+        z: (Math.random() - 0.5) * 16
       });
-      const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-      body.position.set(pos.x, pos.y, pos.z);
-      body.castShadow = true;
-      body.receiveShadow = true;
+    }
+    
+    // Create NPCs at each position
+    positions.forEach((pos, index) => {
+      // Choose a random NPC type, but ensure variety
+      const typeIndex = Math.min(index % this.npcTypes.length, this.npcTypes.length - 1);
+      const npcType = this.npcTypes[typeIndex];
       
-      // Create eyes
-      const eyeGeometry = new THREE.SphereGeometry(0.1, 16, 16);
-      const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      // Create the NPC mesh
+      const npc = new THREE.Mesh(npcType.geometry, npcType.material.clone());
       
-      const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-      leftEye.position.set(0.2, 0.2, 0.4);
-      body.add(leftEye);
+      // Set height based on movement style
+      let y = pos.y;
+      if (npcType.movementStyle === 'flying') {
+        y = 1.5 + Math.random() * 1.5; // Flying enemies are higher
+      } else if (npcType.movementStyle === 'ghost') {
+        y = 1.0 + Math.random() * 2.0; // Ghosts float at various heights
+      }
       
-      const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-      rightEye.position.set(-0.2, 0.2, 0.4);
-      body.add(rightEye);
+      npc.position.set(pos.x, y, pos.z);
+      npc.castShadow = true;
+      npc.receiveShadow = true;
       
-      // Create pupils
-      const pupilGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+      // Create eyes for all NPCs
+      const eyeGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+      const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
       const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
       
-      const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-      leftPupil.position.set(0, 0, 0.05);
-      leftEye.add(leftPupil);
+      // Create two eyes
+      for (let j = 0; j < 2; j++) {
+        const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        const offset = j === 0 ? -0.2 : 0.2;
+        
+        // Position depends on the NPC type
+        if (npcType.name === 'Goomba') {
+          eye.position.set(offset, 0.15, 0.3);
+        } else if (npcType.name === 'Koopa' || npcType.name === 'Spiny') {
+          eye.position.set(offset, 0.2, 0.3);
+        } else {
+          eye.position.set(offset, 0, 0.3);
+        }
+        
+        // Add pupil
+        const pupil = new THREE.Mesh(
+          new THREE.SphereGeometry(0.06, 8, 8),
+          pupilMaterial
+        );
+        pupil.position.z = 0.08;
+        eye.add(pupil);
+        
+        npc.add(eye);
+      }
       
-      const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-      rightPupil.position.set(0, 0, 0.05);
-      rightEye.add(rightPupil);
+      // Add special features based on type
+      if (npcType.name === 'Goomba') {
+        // Add feet to Goomba
+        const footGeometry = new THREE.BoxGeometry(0.3, 0.2, 0.3);
+        const footMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+        
+        for (let f = 0; f < 2; f++) {
+          const foot = new THREE.Mesh(footGeometry, footMaterial);
+          foot.position.set(f === 0 ? 0.25 : -0.25, -0.3, 0);
+          npc.add(foot);
+        }
+      } else if (npcType.name === 'Spiny') {
+        // Add spikes to the Spiny
+        const spikeGeometry = new THREE.ConeGeometry(0.08, 0.25, 4);
+        const spikeMaterial = new THREE.MeshStandardMaterial({ color: 0xFF0000 });
+        
+        for (let s = 0; s < 8; s++) {
+          const spike = new THREE.Mesh(spikeGeometry, spikeMaterial);
+          const angle = (s / 8) * Math.PI * 2;
+          spike.position.set(
+            Math.cos(angle) * 0.5,
+            Math.sin(angle) * 0.5,
+            0
+          );
+          spike.rotation.z = Math.PI / 2;
+          spike.rotation.y = angle;
+          npc.add(spike);
+        }
+      } else if (npcType.name === 'Paratroopa') {
+        // Add shell to Koopa/Paratroopa
+        const shellGeometry = new THREE.SphereGeometry(0.4, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const shellMaterial = new THREE.MeshStandardMaterial({ color: 0xFFAA00 });
+        const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+        shell.rotation.x = Math.PI;
+        shell.position.y = 0.2;
+        npc.add(shell);
+        
+        // Add wings to Paratroopa
+        const wingGeometry = new THREE.PlaneGeometry(0.6, 0.4);
+        const wingMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0xFFFFFF,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.9
+        });
+        
+        for (let w = 0; w < 2; w++) {
+          const wing = new THREE.Mesh(wingGeometry, wingMaterial);
+          wing.position.set(w === 0 ? -0.4 : 0.4, 0.2, 0);
+          wing.rotation.y = w === 0 ? Math.PI / 4 : -Math.PI / 4;
+          npc.add(wing);
+          
+          // Store wing reference for animation
+          if (!npc.userData) npc.userData = {};
+          if (!npc.userData.wings) npc.userData.wings = [];
+          npc.userData.wings.push(wing);
+        }
+      } else if (npcType.name === 'Boo') {
+        // Add "arms" to Boo
+        const armGeometry = new THREE.CapsuleGeometry(0.15, 0.3, 4, 8);
+        const armMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0xFFFFFF,
+          transparent: true,
+          opacity: 0.7
+        });
+        
+        for (let a = 0; a < 2; a++) {
+          const arm = new THREE.Mesh(armGeometry, armMaterial);
+          arm.position.set(a === 0 ? -0.5 : 0.5, -0.2, 0);
+          arm.rotation.z = a === 0 ? -Math.PI / 4 : Math.PI / 4;
+          npc.add(arm);
+        }
+      }
       
-      // Create feet
-      const footGeometry = new THREE.BoxGeometry(0.3, 0.2, 0.3);
-      const footMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+      // Set up physics and behavior properties
+      const moveStyle = npcType.movementStyle;
+      npc.userData = {
+        id: `npc-${index}`,
+        type: npcType.name,
+        isMoving: true,
+        moveSpeed: npcType.speed + Math.random() * 0.01,
+        movementRange: 2 + Math.random() * 3,
+        startX: pos.x,
+        startY: y,
+        startZ: pos.z,
+        moveDirection: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize(),
+        isCrushed: false,
+        movementStyle: moveStyle,
+        jumpHeight: npcType.jumpHeight,
+        jumpTime: 0,
+        strength: npcType.strength,
+        crushable: npcType.crushable,
+        attackCooldown: 0,
+        wingFlapDirection: 1,
+        wingFlapSpeed: 0.05,
+        ghostTimer: Math.random() * Math.PI * 2,
+        originalY: y
+      };
       
-      const leftFoot = new THREE.Mesh(footGeometry, footMaterial);
-      leftFoot.position.set(0.25, -0.4, 0);
-      body.add(leftFoot);
+      // Add to scene and to our list
+      this.scene.add(npc);
+      this.crushableObstacles.push(npc);
       
-      const rightFoot = new THREE.Mesh(footGeometry, footMaterial);
-      rightFoot.position.set(-0.25, -0.4, 0);
-      body.add(rightFoot);
-      
-      // Add properties to the obstacle
-      body.userData.id = `crushable-${index}`;
-      body.userData.isCrushable = true;
-      body.userData.isCrushed = false;
-      body.userData.isMoving = true;
-      body.userData.direction = 1; // 1 for right, -1 for left
-      body.userData.speed = 0.03;
-      body.userData.maxX = pos.x + 2; // Maximum x position
-      body.userData.minX = pos.x - 2; // Minimum x position
-      
-      // Add obstacle to the scene and array
-      this.crushableObstacles.push(body);
-      this.scene.add(body);
-      
-      // Emit event to server about new obstacle
-      this.socket.emit('addObstacle', {
-        id: body.userData.id,
-        position: pos,
-        type: 'crushable'
-      });
+      // Emit to server about this obstacle
+      if (this.socket) {
+        this.socket.emit('addObstacle', {
+          id: npc.userData.id,
+          position: npc.position,
+          type: npcType.name
+        });
+      }
     });
     
     // Listen for obstacle updates from other players
@@ -814,16 +999,133 @@ export default class MultiplayerPlatformer {
   updateCrushableObstacles() {
     this.crushableObstacles.forEach(obstacle => {
       if (obstacle.userData.isMoving && !obstacle.userData.isCrushed) {
-        // Move the obstacle left and right
-        obstacle.position.x += obstacle.userData.direction * obstacle.userData.speed;
+        const userData = obstacle.userData;
         
-        // Check if we need to reverse direction
-        if (obstacle.position.x > obstacle.userData.maxX) {
-          obstacle.userData.direction = -1;
-          obstacle.rotation.y = Math.PI; // Turn around
-        } else if (obstacle.position.x < obstacle.userData.minX) {
-          obstacle.userData.direction = 1;
-          obstacle.rotation.y = 0; // Turn around
+        // Different movement patterns based on NPC type
+        if (userData.movementStyle === 'ground') {
+          // Ground enemies move left and right with simple patrolling
+          
+          // Check if we should turn around due to hitting a wall or edge
+          const ahead = new THREE.Vector3(
+            obstacle.position.x + userData.moveDirection.x * 0.5,
+            0, // Cast from high position down
+            obstacle.position.z + userData.moveDirection.z * 0.5
+          );
+          
+          // Move the NPC
+          obstacle.position.x += userData.moveDirection.x * userData.moveSpeed;
+          obstacle.position.z += userData.moveDirection.z * userData.moveSpeed;
+          
+          // Check if too far from starting position
+          const distanceFromStart = new THREE.Vector2(
+            obstacle.position.x - userData.startX,
+            obstacle.position.z - userData.startZ
+          ).length();
+          
+          if (distanceFromStart > userData.movementRange) {
+            // Turn back toward starting position
+            userData.moveDirection.set(
+              userData.startX - obstacle.position.x,
+              0,
+              userData.startZ - obstacle.position.z
+            ).normalize();
+            
+            // Set rotation to face direction of movement
+            obstacle.rotation.y = Math.atan2(userData.moveDirection.x, userData.moveDirection.z);
+          }
+        } 
+        else if (userData.movementStyle === 'flying') {
+          // Flying enemies move in more complex patterns with height changes
+          
+          // Increment jump time
+          userData.jumpTime += 0.02;
+          
+          // Sinusoidal up and down movement
+          const heightOffset = Math.sin(userData.jumpTime) * userData.jumpHeight * 0.5;
+          obstacle.position.y = userData.startY + heightOffset;
+          
+          // Move horizontally
+          obstacle.position.x += userData.moveDirection.x * userData.moveSpeed;
+          obstacle.position.z += userData.moveDirection.z * userData.moveSpeed;
+          
+          // Check if too far from starting position
+          const distanceFromStart = new THREE.Vector2(
+            obstacle.position.x - userData.startX,
+            obstacle.position.z - userData.startZ
+          ).length();
+          
+          if (distanceFromStart > userData.movementRange) {
+            // Turn back toward starting position
+            userData.moveDirection.set(
+              userData.startX - obstacle.position.x,
+              0,
+              userData.startZ - obstacle.position.z
+            ).normalize();
+            
+            // Set rotation to face direction of movement
+            obstacle.rotation.y = Math.atan2(userData.moveDirection.x, userData.moveDirection.z);
+          }
+          
+          // Animate wings if they exist
+          if (userData.wings && userData.wings.length > 0) {
+            userData.wings.forEach(wing => {
+              // Flap wings up and down
+              wing.rotation.z += userData.wingFlapDirection * userData.wingFlapSpeed;
+              
+              // Reverse direction at limits
+              if (wing.rotation.z > 0.3 || wing.rotation.z < -0.3) {
+                userData.wingFlapDirection *= -1;
+              }
+            });
+          }
+        } 
+        else if (userData.movementStyle === 'ghost') {
+          // Ghost enemies fade in and out and move erratically
+          
+          // Update ghost timer
+          userData.ghostTimer += 0.02;
+          
+          // Sinusoidal opacity changes
+          const opacityValue = 0.3 + Math.sin(userData.ghostTimer) * 0.4;
+          obstacle.traverse(child => {
+            if (child.material && child.material.transparent) {
+              child.material.opacity = Math.max(0.1, opacityValue);
+            }
+          });
+          
+          // Circular/erratic movement pattern
+          const xOffset = Math.sin(userData.ghostTimer) * 2;
+          const zOffset = Math.cos(userData.ghostTimer) * 2;
+          const yOffset = Math.sin(userData.ghostTimer * 0.7) * 0.5;
+          
+          obstacle.position.x = userData.startX + xOffset;
+          obstacle.position.z = userData.startZ + zOffset;
+          obstacle.position.y = userData.originalY + yOffset;
+          
+          // Always face the player for eerie effect
+          if (this.playerMesh) {
+            const lookDirection = new THREE.Vector3();
+            lookDirection.subVectors(this.playerMesh.position, obstacle.position).normalize();
+            obstacle.lookAt(this.playerMesh.position);
+          }
+        }
+        
+        // If the NPC has attack capabilities, check for player proximity
+        if (this.playerMesh && userData.attackCooldown <= 0) {
+          const distanceToPlayer = obstacle.position.distanceTo(this.playerMesh.position);
+          
+          // If player is close, prepare to attack
+          if (distanceToPlayer < 2) {
+            userData.attackCooldown = 60; // Reset attack cooldown
+            
+            // Create enemy attack visual effect
+            this.showEnemyAttackEffect(obstacle.position);
+          }
+        }
+        
+        // Decrease attack cooldown
+        if (userData.attackCooldown > 0) {
+          userData.attackCooldown--;
         }
       }
     });
