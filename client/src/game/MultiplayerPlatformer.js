@@ -1227,7 +1227,10 @@ export default class MultiplayerPlatformer {
       // Store decoration data
       decoration.userData = {
         segmentType: 'decoration',
-        zPosition: z
+        zPosition: z,
+        type: currentTheme.name,
+        isCollidable: true,  // Mark as collidable for collision detection
+        decorationId: `decoration_${this.decorations.length}_${Date.now()}`
       };
       
       this.decorations.push(decoration);
