@@ -13,6 +13,49 @@ export default class MultiplayerPlatformer {
     this.coins = []; // Store collectible coins
     this.powerUps = []; // Store power-ups
     
+    // UI elements
+    this.uiContainer = document.createElement('div');
+    this.uiContainer.className = 'game-ui-overlay';
+    this.uiContainer.style.position = 'absolute';
+    this.uiContainer.style.top = '0';
+    this.uiContainer.style.left = '0';
+    this.uiContainer.style.width = '100%';
+    this.uiContainer.style.pointerEvents = 'none'; // Allow clicking through the UI
+    container.appendChild(this.uiContainer);
+    
+    // Create player count display
+    this.playerCountDisplay = document.createElement('div');
+    this.playerCountDisplay.className = 'player-count';
+    this.playerCountDisplay.style.position = 'absolute';
+    this.playerCountDisplay.style.top = '10px';
+    this.playerCountDisplay.style.right = '10px';
+    this.playerCountDisplay.style.color = 'white';
+    this.playerCountDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    this.playerCountDisplay.style.padding = '5px 10px';
+    this.playerCountDisplay.style.borderRadius = '5px';
+    this.playerCountDisplay.style.fontFamily = 'Arial, sans-serif';
+    this.playerCountDisplay.style.zIndex = '1000';
+    this.playerCountDisplay.innerHTML = '<span>👥 Players: 1</span>';
+    this.uiContainer.appendChild(this.playerCountDisplay);
+    
+    // Sound effects
+    this.soundEffects = {
+      jump: new Audio('https://assets.codepen.io/21542/sfx-jump.mp3'),
+      coin: new Audio('https://assets.codepen.io/21542/sfx-coin.mp3'),
+      powerUp: new Audio('https://assets.codepen.io/21542/sfx-powerup.mp3'),
+      attack: new Audio('https://assets.codepen.io/21542/sfx-attack.mp3'),
+      hit: new Audio('https://assets.codepen.io/21542/sfx-hit.mp3'),
+      playerJoin: new Audio('https://assets.codepen.io/21542/sfx-appears.mp3')
+    };
+    
+    // Configure sound effects
+    Object.values(this.soundEffects).forEach(sound => {
+      sound.volume = 0.5;
+    });
+    
+    // Sound settings
+    this.soundEnabled = true;
+    
     // Player power-up state
     this.activeEffects = {
       speedBoost: 0,      // Timer for speed boost (in frames)
@@ -147,6 +190,7 @@ export default class MultiplayerPlatformer {
     this.socket.on('playerJoin', (data) => {
       console.log(`Player joined: ${data.id}`);
       this.addPlayer(data.id, data.character, data.position);
+      this.updatePlayerCount();
     });
     
     // Handle player movement
@@ -161,6 +205,7 @@ export default class MultiplayerPlatformer {
     this.socket.on('playerLeave', (playerId) => {
       console.log(`Player left: ${playerId}`);
       this.removePlayer(playerId);
+      this.updatePlayerCount();
     });
     
     // Handle player attacks from other players
@@ -168,6 +213,22 @@ export default class MultiplayerPlatformer {
       console.log('Other player attacking at position:', data.position);
       this.showRemotePlayerAttack(data.position, data.color);
     });
+  }
+  
+  updatePlayerCount() {
+    // Calculate total player count (other players + current player)
+    const totalPlayers = this.players.size + 1;
+    
+    // Update the player count display
+    if (this.playerCountDisplay) {
+      this.playerCountDisplay.innerHTML = `<span>👥 Players: ${totalPlayers}</span>`;
+      
+      // Add a brief highlight effect
+      this.playerCountDisplay.style.backgroundColor = 'rgba(50, 205, 50, 0.7)'; // Highlight green
+      setTimeout(() => {
+        this.playerCountDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // Reset back
+      }, 500);
+    }
   }
   
   // Method to visualize other players' attacks
@@ -259,6 +320,30 @@ export default class MultiplayerPlatformer {
       character: character,
       nameLabel: nameDiv
     });
+    
+    // Play player join sound
+    this.playSound('playerJoin');
+  }
+  
+  // Helper function to play sound effects
+  playSound(soundName) {
+    if (!this.soundEnabled) return;
+    
+    // Get the sound
+    const sound = this.soundEffects[soundName];
+    if (!sound) return;
+    
+    // Create a clone of the sound to allow overlapping sounds
+    const soundClone = sound.cloneNode();
+    
+    // Play the sound
+    try {
+      soundClone.play().catch(e => {
+        console.log(`Error playing sound: ${e.message}`);
+      });
+    } catch (e) {
+      console.log(`Exception playing sound: ${e.message}`);
+    }
   }
   
   removePlayer(id) {
@@ -1384,6 +1469,9 @@ export default class MultiplayerPlatformer {
         if (!this.isJumping && this.isRunning) {
           this.velocity.y = this.jumpForce;
           this.isJumping = true;
+          
+          // Play jump sound
+          this.playSound('jump');
         }
         break;
       case 'f': // Attack key - common in many games
@@ -1429,6 +1517,9 @@ export default class MultiplayerPlatformer {
     
     console.log('Player attacking!');
     this.isAttacking = true;
+    
+    // Play attack sound
+    this.playSound('attack');
     
     // Get player color for the attack effect
     const playerColor = this.characterData ? this.getCharacterColor(this.characterData.name) : 0xFFD700;
@@ -1697,7 +1788,8 @@ export default class MultiplayerPlatformer {
         
         console.log('Score:', this.score);
         
-        // Play sound (would be implemented here)
+        // Play coin collection sound
+        this.playSound('coin');
       }
     }
     
@@ -1711,6 +1803,9 @@ export default class MultiplayerPlatformer {
         // Collect the power-up
         powerUp.userData.isCollected = true;
         powerUp.visible = false;
+        
+        // Play power-up sound
+        this.playSound('powerUp');
         
         // Apply the power-up effect
         this.applyPowerUpEffect(powerUp.userData.type);
