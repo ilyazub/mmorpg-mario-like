@@ -48,6 +48,25 @@ const obstacles = new Map<string, ObstacleData>();
 const elements = new Map<string, ElementData>();
 const DEFAULT_WORLD_ID = 1;
 
+// Initialize game world on startup
+async function initializeGameWorld() {
+  try {
+    const worlds = await storage.getActiveGameWorlds();
+    if (worlds.length === 0) {
+      console.log('No active game worlds found. Creating default game world...');
+      await storage.createGameWorld('Default World', 'The main game world for multiplayer platformer', 1);
+      console.log('Default game world created successfully with ID:', DEFAULT_WORLD_ID);
+    } else {
+      console.log(`Found ${worlds.length} existing game worlds.`);
+    }
+  } catch (error) {
+    console.error('Error initializing game world:', error);
+  }
+}
+
+// Run initialization
+initializeGameWorld();
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix with /api
   app.get("/api/health", (req, res) => {
