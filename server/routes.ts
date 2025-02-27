@@ -365,6 +365,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     });
     
+    // Handle decoration collision events
+    socket.on("decorationCollision", async (data: { 
+      decorationId: string, 
+      position: { x: number, y: number, z: number },
+      type: string,
+      worldId?: number
+    }) => {
+      // Store collision info and broadcast to other players
+      console.log(`Player ${socket.id} collided with decoration ${data.decorationId} (${data.type})`);
+      
+      // Broadcast to other players to show decoration interaction
+      socket.broadcast.emit("decorationInteraction", {
+        decorationId: data.decorationId,
+        position: data.position,
+        type: data.type,
+        playerId: socket.id
+      });
+      
+      // Persist decoration to world elements if it's a significant one
+      const worldId = data.worldId || DEFAULT_WORLD_ID;
+      try {
+        if (Math.random() < 0.2) { // Only persist some decorations to avoid database bloat
+          await storage.createWorldElement({
+            worldId,
+            elementId: data.decorationId,
+            type: data.type,
+            posX: Math.round(data.position.x * 10) / 10,
+            posY: Math.round(data.position.y * 10) / 10,
+            posZ: Math.round(data.position.z * 10) / 10,
+            isActive: true,
+            width: 1,
+            height: 1,
+            depth: 1,
+            theme: "decoration"
+          });
+          console.log(`Persisted decoration ${data.decorationId} to world ${worldId}`);
+        }
+      } catch (err) {
+        console.error("Error persisting decoration:", err);
+      }
+    });
+    
     // Handle disconnection
     socket.on("disconnect", () => {
       console.log(`Player disconnected: ${socket.id}`);

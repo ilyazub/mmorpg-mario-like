@@ -224,6 +224,12 @@ export default class MultiplayerPlatformer {
       console.log('Other player attacking at position:', data.position);
       this.showRemotePlayerAttack(data.position, data.color);
     });
+    
+    // Handle decoration interactions from other players
+    this.socket.on('decorationInteraction', (data) => {
+      console.log('Other player interacted with decoration:', data);
+      this.triggerDecorationWiggle(data.decorationId);
+    });
   }
   
   updatePlayerCount() {
@@ -3262,6 +3268,30 @@ export default class MultiplayerPlatformer {
   }
   
   triggerDecorationWiggle(decoration) {
+    // If decoration is a string (ID), find the decoration object
+    if (typeof decoration === 'string') {
+      // Look for the decoration in the scene
+      let foundDecoration = null;
+      this.scene.traverse(object => {
+        if (object.userData && object.userData.id === decoration) {
+          foundDecoration = object;
+        }
+      });
+      
+      if (!foundDecoration) {
+        console.warn(`Decoration with ID ${decoration} not found`);
+        return;
+      }
+      
+      decoration = foundDecoration;
+    }
+    
+    // Skip if not a valid object
+    if (!decoration || !decoration.rotation) {
+      console.warn('Invalid decoration object');
+      return;
+    }
+    
     // Save original rotation
     if (!decoration.userData.originalRotation) {
       decoration.userData.originalRotation = {
@@ -3276,6 +3306,9 @@ export default class MultiplayerPlatformer {
     let wiggleTime = 0;
     const wiggleDuration = 20;
     const wiggleAmount = 0.05;
+    
+    // Play sound
+    this.playSound('decorationHit');
     
     const wiggleAnimation = () => {
       wiggleTime++;
