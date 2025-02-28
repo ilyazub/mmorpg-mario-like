@@ -4555,6 +4555,12 @@ export default class MultiplayerPlatformer {
       this.cameraArrow.style.transform = `rotate(${rotationDegrees}deg)`;
     }
     
+    // Update minimap with real-time player locations
+    // Only update every few frames to optimize performance
+    if (this.frameCount % 10 === 0) {  // Update every 10 frames
+      this.updateMinimap();
+    }
+    
     // Update moving platforms
     this.updateMovingPlatforms();
     
