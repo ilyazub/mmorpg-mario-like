@@ -77,7 +77,8 @@ async function renderPage(req: Request, res: Response, next: NextFunction): Prom
       template = fs.readFileSync(templatePath, 'utf-8');
     } catch (error) {
       console.error(`Error reading index template: ${error}`);
-      return res.status(500).send('Server error');
+      res.status(500).send('Server error');
+      return;
     }
     
     // Insert metadata
@@ -95,7 +96,8 @@ async function renderPage(req: Request, res: Response, next: NextFunction): Prom
       timestamp: now
     });
     
-    return res.send(html);
+    res.send(html);
+    return;
   } catch (error) {
     console.error(`Error rendering page: ${error}`);
     next(error);
