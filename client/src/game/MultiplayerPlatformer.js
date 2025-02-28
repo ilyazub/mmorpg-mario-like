@@ -139,6 +139,20 @@ export default class MultiplayerPlatformer {
     this.minimapDisplay.dataset.state = 'normal';
     this.minimapDisplay.innerHTML = '<canvas id="minimap-canvas" width="150" height="150"></canvas>';
     
+    // Add title label
+    const minimapTitle = document.createElement('div');
+    minimapTitle.style.position = 'absolute';
+    minimapTitle.style.top = '0';
+    minimapTitle.style.left = '0';
+    minimapTitle.style.width = '100%';
+    minimapTitle.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    minimapTitle.style.color = 'white';
+    minimapTitle.style.padding = '2px 5px';
+    minimapTitle.style.fontSize = '10px';
+    minimapTitle.style.textAlign = 'center';
+    minimapTitle.innerHTML = 'MINI-MAP';
+    this.minimapDisplay.appendChild(minimapTitle);
+    
     // Add a label to indicate 'M' key can toggle minimap
     const minimapLabel = document.createElement('div');
     minimapLabel.style.position = 'absolute';
