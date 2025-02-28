@@ -201,14 +201,19 @@ export default function MultiplayerGameContainer() {
   // Mobile control handlers
   const handleTouchStart = useCallback((control: string) => {
     if (gameRef.current) {
-      // Map mobile controls to game actions
+      // Map mobile controls to keyboard keys
       const keyMap: Record<string, string> = {
+        up: 'w',
+        down: 's',
+        left: 'a',
+        right: 'd',
         jump: ' ', // Space
-        action: 'f' // Attack
+        action: 'f'  // Attack
       };
       
       const key = keyMap[control];
       if (key) {
+        console.log(`Mobile control: ${control} -> Key: ${key}`);
         gameRef.current.handleKeyDown({ key });
       }
     }
@@ -216,97 +221,20 @@ export default function MultiplayerGameContainer() {
 
   const handleTouchEnd = useCallback((control: string) => {
     if (gameRef.current) {
-      // Map mobile controls to game actions
+      // Map mobile controls to keyboard keys
       const keyMap: Record<string, string> = {
+        up: 'w',
+        down: 's',
+        left: 'a',
+        right: 'd',
         jump: ' ', // Space
-        action: 'f' // Attack
+        action: 'f'  // Attack
       };
       
       const key = keyMap[control];
       if (key) {
         gameRef.current.handleKeyUp({ key });
       }
-    }
-  }, []);
-
-  const handleJoystickMove = useCallback((x: number, y: number) => {
-    if (gameRef.current && gameRef.current.playerMesh) {
-      // Direct movement based on joystick position
-      const moveSpeed = 1.5; // Adjust sensitivity
-      
-      // Apply movement direction relative to camera angle
-      const forwardVector = new THREE.Vector3(0, 0, -1)
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), gameRef.current.cameraAngleHorizontal);
-      const rightVector = new THREE.Vector3(1, 0, 0)
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), gameRef.current.cameraAngleHorizontal);
-      
-      // Combine vectors based on joystick input
-      const moveVector = new THREE.Vector3()
-        .addScaledVector(forwardVector, y * moveSpeed)
-        .addScaledVector(rightVector, x * moveSpeed);
-      
-      // Apply movement
-      gameRef.current.playerMesh.position.x += moveVector.x;
-      gameRef.current.playerMesh.position.z += moveVector.z;
-      
-      // Update velocity for animations
-      gameRef.current.velocity.x = moveVector.x;
-      gameRef.current.velocity.z = moveVector.z;
-      
-      // Send position update to server if connected
-      if (gameRef.current.socket && gameRef.current.socket.readyState === WebSocket.OPEN) {
-        gameRef.current.socket.send(JSON.stringify({
-          type: 'updatePosition',
-          position: {
-            x: gameRef.current.playerMesh.position.x,
-            y: gameRef.current.playerMesh.position.y,
-            z: gameRef.current.playerMesh.position.z
-          }
-        }));
-      }
-    }
-  }, []);
-
-  const handleCameraMove = useCallback((deltaX: number, deltaY: number) => {
-    if (gameRef.current) {
-      // Update camera angles
-      gameRef.current.cameraAngleHorizontal -= deltaX; // Horizontal rotation (left/right)
-      
-      // Limit vertical angle to avoid camera flipping
-      const newVerticalAngle = gameRef.current.cameraAngleVertical - deltaY;
-      const maxVertical = Math.PI / 2.5; // Slightly less than 90 degrees
-      gameRef.current.cameraAngleVertical = Math.max(-maxVertical, Math.min(maxVertical, newVerticalAngle));
-      
-      // Update camera position based on new angles
-      if (gameRef.current.camera && gameRef.current.playerMesh) {
-        const distance = 10; // Camera distance from player
-        const height = 5;    // Camera height above player
-        
-        // Calculate camera position in spherical coordinates
-        const x = Math.sin(gameRef.current.cameraAngleHorizontal) * Math.cos(gameRef.current.cameraAngleVertical) * distance;
-        const z = Math.cos(gameRef.current.cameraAngleHorizontal) * Math.cos(gameRef.current.cameraAngleVertical) * distance;
-        const y = Math.sin(gameRef.current.cameraAngleVertical) * distance + height;
-        
-        // Position camera relative to player
-        gameRef.current.camera.position.set(
-          gameRef.current.playerMesh.position.x + x,
-          gameRef.current.playerMesh.position.y + y,
-          gameRef.current.playerMesh.position.z + z
-        );
-        
-        // Look at player
-        gameRef.current.camera.lookAt(
-          gameRef.current.playerMesh.position.x,
-          gameRef.current.playerMesh.position.y + 2, // Look slightly above player
-          gameRef.current.playerMesh.position.z
-        );
-      }
-    }
-  }, []);
-
-  const handleAttackGesture = useCallback(() => {
-    if (gameRef.current) {
-      gameRef.current.performAttack();
     }
   }, []);
 
@@ -357,9 +285,7 @@ export default function MultiplayerGameContainer() {
             <ul className="text-sm space-y-1">
               {isMobile ? (
                 <>
-                  <li><span className="font-semibold">Move:</span> Left Joystick</li>
-                  <li><span className="font-semibold">Camera:</span> Right Side Drag</li>
-                  <li><span className="font-semibold">Attack:</span> Swipe Down in Center</li>
+                  <li><span className="font-semibold">Move:</span> WASD Buttons</li>
                   <li><span className="font-semibold">Jump/Fly:</span> Blue Button</li>
                   <li><span className="font-semibold">Action:</span> Red Button</li>
                 </>
@@ -425,9 +351,6 @@ export default function MultiplayerGameContainer() {
         <MobileControls 
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
-          onJoystickMove={handleJoystickMove}
-          onCameraMove={handleCameraMove}
-          onAttackGesture={handleAttackGesture}
         />
       )}
     </div>
