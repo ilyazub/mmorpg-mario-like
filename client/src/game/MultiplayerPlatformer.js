@@ -2957,21 +2957,57 @@ export default class MultiplayerPlatformer {
       case 'w':
       case 'W':
         this.keys.forward = true;
+        // Direct coordinate change - move forward 2 units in the direction the camera is facing
+        if (this.playerMesh) {
+          const forwardVector = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngleHorizontal);
+          this.playerMesh.position.x += forwardVector.x * 2;
+          this.playerMesh.position.z += forwardVector.z * 2;
+          // Update velocity to match movement direction for animation
+          this.velocity.x = forwardVector.x;
+          this.velocity.z = forwardVector.z;
+        }
         console.log('W key pressed - Forward:', this.keys.forward);
         break;
       case 's':
       case 'S':
         this.keys.backward = true;
+        // Direct coordinate change - move backward 2 units
+        if (this.playerMesh) {
+          const backwardVector = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngleHorizontal);
+          this.playerMesh.position.x += backwardVector.x * 2;
+          this.playerMesh.position.z += backwardVector.z * 2;
+          // Update velocity to match movement direction for animation
+          this.velocity.x = backwardVector.x;
+          this.velocity.z = backwardVector.z;
+        }
         console.log('S key pressed - Backward:', this.keys.backward);
         break;
       case 'a':
       case 'A':
         this.keys.left = true;
+        // Direct coordinate change - move left 2 units
+        if (this.playerMesh) {
+          const leftVector = new THREE.Vector3(-1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngleHorizontal);
+          this.playerMesh.position.x += leftVector.x * 2;
+          this.playerMesh.position.z += leftVector.z * 2;
+          // Update velocity to match movement direction for animation
+          this.velocity.x = leftVector.x;
+          this.velocity.z = leftVector.z;
+        }
         console.log('A key pressed - Left:', this.keys.left);
         break;
       case 'd':
       case 'D':
         this.keys.right = true;
+        // Direct coordinate change - move right 2 units
+        if (this.playerMesh) {
+          const rightVector = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.cameraAngleHorizontal);
+          this.playerMesh.position.x += rightVector.x * 2;
+          this.playerMesh.position.z += rightVector.z * 2;
+          // Update velocity to match movement direction for animation
+          this.velocity.x = rightVector.x;
+          this.velocity.z = rightVector.z;
+        }
         console.log('D key pressed - Right:', this.keys.right);
         break;
       // Camera rotation with arrow keys
