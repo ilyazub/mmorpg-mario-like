@@ -158,6 +158,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const worlds = await storage.getActiveGameWorlds();
     res.json(worlds);
   });
+  
+  // Health check endpoint for monitoring and cron jobs
+  app.get("/api/health", async (req, res) => {
+    try {
+      // Test database connection
+      const dbStatus = await pool.query('SELECT 1 as health').then(result => ({
+        status: 'ok',
+        message: 'Database connection successful',
+        timestamp: new Date().toISOString()
+      })).catch(err => ({
+        status: 'error',
+        message: `Database connection failed: ${err.message}`,
+        timestamp: new Date().toISOString()
+      }));
+      
+      // Check active players count
+      const activePlayers = players.size;
+      
+      // Check active obstacles count
+      const activeObstacles = obstacles.size;
+      
+      // System health info
+      const healthInfo = {
+        service: 'multiplayer-platformer',
+        version: process.env.npm_package_version || '1.0.0',
+        uptime: Math.floor(process.uptime()),
+        environment: process.env.NODE_ENV || 'development',
+        database: dbStatus,
+        memory: {
+          heapUsed: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
+          heapTotal: Math.floor(process.memoryUsage().heapTotal / 1024 / 1024),
+          rss: Math.floor(process.memoryUsage().rss / 1024 / 1024),
+        },
+        game: {
+          activePlayers,
+          activeObstacles,
+          activeElements: elements.size,
+        }
+      };
+      
+      // Return 200 if database is connected, otherwise 503
+      if (dbStatus.status === 'ok') {
+        res.status(200).json(healthInfo);
+      } else {
+        res.status(503).json(healthInfo);
+      }
+    } catch (error) {
+      console.error('Health check failed:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Health check failed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
 
   const httpServer = createServer(app);
   
