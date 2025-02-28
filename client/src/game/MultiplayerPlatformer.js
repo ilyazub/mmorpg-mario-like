@@ -2824,15 +2824,19 @@ export default class MultiplayerPlatformer {
       // Player movement with WASD
       case 'w':
         this.keys.forward = true;
+        console.log('W key pressed - Forward:', this.keys.forward);
         break;
       case 's':
         this.keys.backward = true;
+        console.log('S key pressed - Backward:', this.keys.backward);
         break;
       case 'a':
         this.keys.left = true;
+        console.log('A key pressed - Left:', this.keys.left);
         break;
       case 'd':
         this.keys.right = true;
+        console.log('D key pressed - Right:', this.keys.right);
         break;
       // Camera rotation with arrow keys
       case 'ArrowUp':
@@ -4762,6 +4766,13 @@ export default class MultiplayerPlatformer {
       // Calculate rotated movement vector based on camera angle
       const rotatedX = moveX * Math.cos(this.cameraAngleHorizontal) + moveZ * Math.sin(this.cameraAngleHorizontal);
       const rotatedZ = moveZ * Math.cos(this.cameraAngleHorizontal) - moveX * Math.sin(this.cameraAngleHorizontal);
+      
+      console.log('Movement Calculation:', {
+        moveX, moveZ,
+        cameraAngle: this.cameraAngleHorizontal,
+        rotatedX, rotatedZ,
+        effectiveSpeed: (this.playerSpeed * (1 + (this.characterData ? (this.characterData.speed / 100) : 0)) * normalizedDelta)
+      });
       
       this.velocity.x = rotatedX;
       this.velocity.z = rotatedZ;

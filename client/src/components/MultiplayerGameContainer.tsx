@@ -21,8 +21,29 @@ export default function MultiplayerGameContainer() {
 
   useEffect(() => {
     if (containerRef.current && !gameRef.current) {
+      console.log('Initializing game and attaching event listeners');
+      
       // Initialize game on component mount
       gameRef.current = new MultiplayerPlatformer(containerRef.current);
+      
+      // Manually attach key event handlers to make sure they're connected
+      const handleKeyDown = (event: KeyboardEvent) => {
+        console.log(`Key down: ${event.key}`);
+        if (gameRef.current) {
+          gameRef.current.handleKeyDown(event);
+        }
+      };
+      
+      const handleKeyUp = (event: KeyboardEvent) => {
+        console.log(`Key up: ${event.key}`);
+        if (gameRef.current) {
+          gameRef.current.handleKeyUp(event);
+        }
+      };
+      
+      // Add keydown/keyup listeners to window
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
       
       // Set up interval to update UI with game stats
       const statsInterval = setInterval(() => {
@@ -33,8 +54,14 @@ export default function MultiplayerGameContainer() {
       }, 500);
       
       return () => {
+        console.log('Cleaning up game and event listeners');
         clearInterval(statsInterval);
-        // Clean up event listeners when component unmounts
+        
+        // Remove manually added event listeners
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+        
+        // Clean up when component unmounts
         if (gameRef.current) {
           window.removeEventListener('resize', gameRef.current.handleResize);
           
