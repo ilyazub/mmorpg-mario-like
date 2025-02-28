@@ -2408,13 +2408,24 @@ export default class MultiplayerPlatformer {
       this.scene.remove(this.playerMesh);
     }
     
+    // Create player mesh with consistent size
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const playerColor = this.getCharacterColor(character.name);
-    const material = new THREE.MeshLambertMaterial({ color: playerColor });
+    const material = new THREE.MeshLambertMaterial({ 
+      color: playerColor,
+      emissive: playerColor,
+      emissiveIntensity: 0.2 // Add subtle glow to make player stand out
+    });
+    
     this.playerMesh = new THREE.Mesh(geometry, material);
-    this.playerMesh.castShadow = true;
+    this.playerMesh.castShadow = true; 
     this.playerMesh.receiveShadow = true;
-    this.playerMesh.position.set(0, 1, 0);
+    
+    // Position player at the center of the scene
+    // The MIN_HEIGHT (0.5) ensures player sits exactly on the ground
+    // (since the ground level is at y=0 and player is 1 unit tall)
+    const MIN_HEIGHT = 0.5; // Half player height
+    this.playerMesh.position.set(0, MIN_HEIGHT, 0);
     this.scene.add(this.playerMesh);
     
     // Tell server about character selection
@@ -2467,11 +2478,48 @@ export default class MultiplayerPlatformer {
       case ' ': // Space bar
         this.keys.jump = true;
         if (!this.isJumping && this.isRunning) {
+          // Apply the jump force for a good upward momentum
           this.velocity.y = this.jumpForce;
           this.isJumping = true;
           
           // Play jump sound
           this.playSound('jump');
+          
+          // Add a small visual indicator for the jump
+          if (this.playerMesh) {
+            // Create a small dust effect at player's feet
+            const dustParticles = new THREE.Group();
+            
+            for (let i = 0; i < 5; i++) {
+              const particle = new THREE.Mesh(
+                new THREE.SphereGeometry(0.1, 8, 8),
+                new THREE.MeshBasicMaterial({ 
+                  color: 0xdddddd, 
+                  transparent: true, 
+                  opacity: 0.7 
+                })
+              );
+              
+              // Random position around player's feet
+              particle.position.set(
+                (Math.random() - 0.5) * 0.5,
+                0,
+                (Math.random() - 0.5) * 0.5
+              );
+              
+              dustParticles.add(particle);
+            }
+            
+            // Position dust at player's feet
+            dustParticles.position.copy(this.playerMesh.position);
+            dustParticles.position.y = 0; // Exactly at ground level
+            this.scene.add(dustParticles);
+            
+            // Animate and remove the dust effect
+            setTimeout(() => {
+              this.scene.remove(dustParticles);
+            }, 300);
+          }
         }
         break;
       case 'f': // Attack key - common in many games
