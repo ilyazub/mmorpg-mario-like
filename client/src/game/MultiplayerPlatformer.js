@@ -2448,6 +2448,13 @@ export default class MultiplayerPlatformer {
         // Toggle inventory display
         this.toggleInventoryDisplay();
         break;
+      case 'v':
+        // Rotate camera 90 degrees
+        this.cameraAngleHorizontal += Math.PI/2;
+        this.showNotification("Camera rotated", "info");
+        // Play a sound for feedback
+        this.playSound('powerUp');
+        break;
       case 'c':
         // Reset camera to default position
         this.resetCamera();
@@ -3079,11 +3086,13 @@ export default class MultiplayerPlatformer {
         this.minimapDisplay.style.height = '300px';
         this.minimapCanvas.width = 300;
         this.minimapCanvas.height = 300;
+        this.showNotification('Minimap enlarged', 'info', '#4a90e2');
         newState = 'large';
         break;
       case 'large':
         // Hide
         this.minimapDisplay.style.display = 'none';
+        this.showNotification('Minimap hidden', 'info', '#4a90e2');
         newState = 'hidden';
         break;
       case 'hidden':
@@ -3093,49 +3102,368 @@ export default class MultiplayerPlatformer {
         this.minimapDisplay.style.height = '150px';
         this.minimapCanvas.width = 150;
         this.minimapCanvas.height = 150;
+        this.showNotification('Minimap visible', 'info', '#4a90e2');
         newState = 'normal';
         break;
     }
     
     this.minimapDisplay.dataset.state = newState;
     this.updateMinimap();
+    this.playSound('powerUp');
+    
+    // Set up click handling for the minimap if not already done
+    if (!this.minimapHasClickListener && this.minimapCanvas) {
+      this.minimapCanvas.addEventListener('click', this.handleMinimapClick.bind(this));
+      this.minimapHasClickListener = true;
+    }
   }
   
-  // Update minimap
+  // Handle clicks on the minimap
+  handleMinimapClick(event) {
+    if (!this.minimapContext || !this.minimapCanvas || !this.playerMesh) return;
+    
+    // Get click coordinates relative to the canvas
+    const rect = this.minimapCanvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // Calculate scale and center
+    const scale = this.minimapCanvas.width / 250; // Match the scale in updateMinimap
+    const centerX = this.minimapCanvas.width / 2;
+    const centerY = this.minimapCanvas.height / 2;
+    
+    // Convert click to world coordinates
+    const worldX = this.playerMesh.position.x + (x - centerX) / scale;
+    const worldZ = this.playerMesh.position.z + (y - centerY) / scale;
+    
+    // Check if we clicked on any important location (NPCs, players, etc)
+    let clickedObject = null;
+    let clickedType = '';
+    let minDistance = 10; // Minimum distance threshold for click (in world units)
+    
+    // Check if we clicked on another player
+    this.players.forEach(player => {
+      const distance = Math.sqrt(
+        Math.pow(player.mesh.position.x - worldX, 2) +
+        Math.pow(player.mesh.position.z - worldZ, 2)
+      );
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        clickedObject = player;
+        clickedType = 'player';
+      }
+    });
+    
+    // Check if we clicked on an NPC
+    if (!clickedObject) {
+      for (const decoration of this.decorations) {
+        if (decoration.userData && decoration.userData.type === 'npc') {
+          const distance = Math.sqrt(
+            Math.pow(decoration.position.x - worldX, 2) +
+            Math.pow(decoration.position.z - worldZ, 2)
+          );
+          
+          if (distance < minDistance) {
+            minDistance = distance;
+            clickedObject = decoration;
+            clickedType = 'npc';
+          }
+        }
+      }
+    }
+    
+    // Check if we clicked on a collectible
+    if (!clickedObject) {
+      for (const coin of this.coins) {
+        if (coin.userData.isCollected) continue;
+        
+        const distance = Math.sqrt(
+          Math.pow(coin.position.x - worldX, 2) +
+          Math.pow(coin.position.z - worldZ, 2)
+        );
+        
+        if (distance < minDistance) {
+          minDistance = distance;
+          clickedObject = coin;
+          clickedType = 'collectible';
+        }
+      }
+    }
+    
+    // Show info about the clicked object
+    if (clickedObject) {
+      this.showInfoPopup(clickedObject, clickedType, x, y);
+    } else {
+      // Show coordinates at the clicked location
+      const coordX = Math.floor(worldX);
+      const coordZ = Math.floor(worldZ);
+      
+      // Calculate zone coordinates
+      const zoneX = Math.floor(worldX / this.zoneSize);
+      const zoneZ = Math.floor(worldZ / this.zoneSize);
+      
+      this.showNotification(`Coordinates: X:${coordX}, Z:${coordZ} (Zone: ${zoneX},${zoneZ})`, 'info', '#4a90e2');
+    }
+  }
+  
+  // Show an info popup for a clicked object on the minimap
+  showInfoPopup(object, type, clickX, clickY) {
+    // Create or reuse popup element
+    if (!this.infoPopup) {
+      this.infoPopup = document.createElement('div');
+      this.infoPopup.className = 'info-popup';
+      this.infoPopup.style.position = 'absolute';
+      this.infoPopup.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+      this.infoPopup.style.color = 'white';
+      this.infoPopup.style.padding = '10px';
+      this.infoPopup.style.borderRadius = '5px';
+      this.infoPopup.style.fontSize = '12px';
+      this.infoPopup.style.zIndex = '2000';
+      this.infoPopup.style.pointerEvents = 'none';
+      this.infoPopup.style.width = '180px';
+      this.infoPopup.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
+      this.infoPopup.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+      
+      // Add close button
+      const closeButton = document.createElement('div');
+      closeButton.innerHTML = 'X';
+      closeButton.style.position = 'absolute';
+      closeButton.style.top = '5px';
+      closeButton.style.right = '5px';
+      closeButton.style.cursor = 'pointer';
+      closeButton.style.width = '15px';
+      closeButton.style.height = '15px';
+      closeButton.style.textAlign = 'center';
+      closeButton.style.lineHeight = '15px';
+      closeButton.style.borderRadius = '50%';
+      closeButton.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+      closeButton.style.pointerEvents = 'auto';
+      
+      closeButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.infoPopup.style.display = 'none';
+      });
+      
+      this.infoPopup.appendChild(closeButton);
+      this.uiContainer.appendChild(this.infoPopup);
+    }
+    
+    // Position popup near click but ensure it stays within viewport
+    const miniMapRect = this.minimapCanvas.getBoundingClientRect();
+    let popupX = miniMapRect.left + clickX + 10;
+    let popupY = miniMapRect.top + clickY - 10;
+    
+    // Adjust if too close to right edge
+    if (popupX + 180 > window.innerWidth) {
+      popupX = miniMapRect.left + clickX - 190;
+    }
+    
+    // Adjust if too close to bottom edge
+    if (popupY + 150 > window.innerHeight) {
+      popupY = miniMapRect.top + clickY - 160;
+    }
+    
+    this.infoPopup.style.left = `${popupX}px`;
+    this.infoPopup.style.top = `${popupY}px`;
+    
+    // Populate content based on object type
+    let content = '';
+    
+    switch (type) {
+      case 'player':
+        // Show player info
+        const player = object;
+        const character = player.character || { name: 'Unknown' };
+        const distance = Math.sqrt(
+          Math.pow(player.mesh.position.x - this.playerMesh.position.x, 2) +
+          Math.pow(player.mesh.position.z - this.playerMesh.position.z, 2)
+        );
+        
+        content = `
+          <div style="text-align: center; margin-bottom: 10px; color: #4a90e2;">Player Info</div>
+          <div><strong>Name:</strong> ${character.name}</div>
+          <div><strong>Distance:</strong> ${Math.floor(distance)} units</div>
+          <div><strong>Location:</strong> X:${Math.floor(player.mesh.position.x)}, Z:${Math.floor(player.mesh.position.z)}</div>
+        `;
+        break;
+        
+      case 'npc':
+        // Show NPC info
+        const npc = object;
+        const npcData = npc.userData;
+        const npcDistance = Math.sqrt(
+          Math.pow(npc.position.x - this.playerMesh.position.x, 2) +
+          Math.pow(npc.position.z - this.playerMesh.position.z, 2)
+        );
+        
+        // Determine NPC type/role for display
+        let npcType = npcData.role || 'villager';
+        if (npcData.npcType === 'enemy') {
+          npcType = 'enemy';
+        }
+        
+        content = `
+          <div style="text-align: center; margin-bottom: 10px; color: #ffcc00;">NPC Info</div>
+          <div><strong>Name:</strong> ${npcData.name || 'Unknown NPC'}</div>
+          <div><strong>Type:</strong> ${npcType.charAt(0).toUpperCase() + npcType.slice(1)}</div>
+          <div><strong>Distance:</strong> ${Math.floor(npcDistance)} units</div>
+        `;
+        
+        // Add quest info if NPC has a quest
+        if (npcData.questId) {
+          content += `
+            <div><strong>Has Quest:</strong> Yes</div>
+            <div style="margin-top: 5px; font-style: italic;">Click to interact</div>
+          `;
+        }
+        break;
+        
+      case 'collectible':
+        // Show collectible info
+        const collectible = object;
+        const collectibleData = collectible.userData;
+        const itemDistance = Math.sqrt(
+          Math.pow(collectible.position.x - this.playerMesh.position.x, 2) +
+          Math.pow(collectible.position.z - this.playerMesh.position.z, 2)
+        );
+        
+        content = `
+          <div style="text-align: center; margin-bottom: 10px; color: #ffd700;">Collectible</div>
+          <div><strong>Type:</strong> ${collectibleData.type || 'Coin'}</div>
+          <div><strong>Value:</strong> ${collectibleData.value || '1'}</div>
+          <div><strong>Distance:</strong> ${Math.floor(itemDistance)} units</div>
+        `;
+        break;
+        
+      default:
+        content = `
+          <div style="text-align: center; margin-bottom: 10px;">Location Info</div>
+          <div>Unknown object</div>
+        `;
+    }
+    
+    this.infoPopup.innerHTML += content;
+    this.infoPopup.style.display = 'block';
+    
+    // Play sound
+    this.playSound('powerUp');
+    
+    // Auto hide after 5 seconds
+    if (this.infoPopupTimer) {
+      clearTimeout(this.infoPopupTimer);
+    }
+    this.infoPopupTimer = setTimeout(() => {
+      this.infoPopup.style.display = 'none';
+    }, 5000);
+  }
+  
+  // Update minimap with real-time player locations
   updateMinimap() {
     if (!this.minimapContext || !this.minimapCanvas || !this.playerMesh) return;
     
     // Clear the canvas
     this.minimapContext.clearRect(0, 0, this.minimapCanvas.width, this.minimapCanvas.height);
     
-    // Draw background
-    this.minimapContext.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    // Draw background with a border
+    this.minimapContext.fillStyle = 'rgba(0, 0, 0, 0.5)';
     this.minimapContext.fillRect(0, 0, this.minimapCanvas.width, this.minimapCanvas.height);
     
+    // Add border
+    this.minimapContext.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    this.minimapContext.lineWidth = 2;
+    this.minimapContext.strokeRect(0, 0, this.minimapCanvas.width, this.minimapCanvas.height);
+    
     // Calculate scale and center based on minimap size
-    const scale = this.minimapCanvas.width / 200; // 200 world units shown on map
+    const scale = this.minimapCanvas.width / 250; // 250 world units shown on map (increased view range)
     const centerX = this.minimapCanvas.width / 2;
     const centerY = this.minimapCanvas.height / 2;
     
-    // Draw platforms
-    this.minimapContext.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    // Draw world zones as grid
+    this.minimapContext.strokeStyle = 'rgba(50, 50, 50, 0.3)';
+    this.minimapContext.lineWidth = 1;
+    
+    // Calculate current zone
+    const playerGridX = Math.floor(this.playerMesh.position.x / this.zoneSize);
+    const playerGridZ = Math.floor(this.playerMesh.position.z / this.zoneSize);
+    
+    // Draw grid lines
+    const gridSize = this.zoneSize * scale;
+    const offsetX = centerX - (this.playerMesh.position.x % this.zoneSize) * scale;
+    const offsetZ = centerY - (this.playerMesh.position.z % this.zoneSize) * scale;
+    
+    // Draw vertical grid lines
+    for (let x = offsetX; x < this.minimapCanvas.width; x += gridSize) {
+      this.minimapContext.beginPath();
+      this.minimapContext.moveTo(x, 0);
+      this.minimapContext.lineTo(x, this.minimapCanvas.height);
+      this.minimapContext.stroke();
+    }
+    for (let x = offsetX - gridSize; x >= 0; x -= gridSize) {
+      this.minimapContext.beginPath();
+      this.minimapContext.moveTo(x, 0);
+      this.minimapContext.lineTo(x, this.minimapCanvas.height);
+      this.minimapContext.stroke();
+    }
+    
+    // Draw horizontal grid lines
+    for (let y = offsetZ; y < this.minimapCanvas.height; y += gridSize) {
+      this.minimapContext.beginPath();
+      this.minimapContext.moveTo(0, y);
+      this.minimapContext.lineTo(this.minimapCanvas.width, y);
+      this.minimapContext.stroke();
+    }
+    for (let y = offsetZ - gridSize; y >= 0; y -= gridSize) {
+      this.minimapContext.beginPath();
+      this.minimapContext.moveTo(0, y);
+      this.minimapContext.lineTo(this.minimapCanvas.width, y);
+      this.minimapContext.stroke();
+    }
+    
+    // Draw platforms with different colors based on height
     for (const platform of this.platforms) {
       const x = centerX + (platform.position.x - this.playerMesh.position.x) * scale;
       const y = centerY + (platform.position.z - this.playerMesh.position.z) * scale;
       
       // Only draw if in viewport
-      if (x >= 0 && x <= this.minimapCanvas.width && 
-          y >= 0 && y <= this.minimapCanvas.height) {
+      if (x >= -5 && x <= this.minimapCanvas.width + 5 && 
+          y >= -5 && y <= this.minimapCanvas.height + 5) {
+        
+        // Color based on height (darker = lower, lighter = higher)
+        const heightFactor = Math.min(1, Math.max(0, (platform.position.y / 20) + 0.3));
+        this.minimapContext.fillStyle = `rgba(200, 200, 200, ${heightFactor})`;
+        
+        // Size based on platform size
+        const platformSize = platform.scale?.x || 1;
+        const dotSize = 3 * scale * platformSize;
+        
         this.minimapContext.fillRect(
-          x - 2 * scale, 
-          y - 2 * scale, 
-          4 * scale, 
-          4 * scale
+          x - dotSize / 2, 
+          y - dotSize / 2, 
+          dotSize, 
+          dotSize
         );
       }
     }
     
-    // Draw NPCs and special objects
+    // Draw collectibles (coins, etc) as small yellow dots
+    for (const coin of this.coins) {
+      if (coin.userData.isCollected) continue; // Skip collected coins
+      
+      const x = centerX + (coin.position.x - this.playerMesh.position.x) * scale;
+      const y = centerY + (coin.position.z - this.playerMesh.position.z) * scale;
+      
+      if (x >= 0 && x <= this.minimapCanvas.width && 
+          y >= 0 && y <= this.minimapCanvas.height) {
+        // Gold dots for coins
+        this.minimapContext.fillStyle = 'rgba(255, 215, 0, 0.8)';
+        this.minimapContext.beginPath();
+        this.minimapContext.arc(x, y, 2 * scale, 0, Math.PI * 2);
+        this.minimapContext.fill();
+      }
+    }
+    
+    // Draw NPCs and special objects with icons
     for (const decoration of this.decorations) {
       if (decoration.userData && decoration.userData.type === 'npc') {
         const x = centerX + (decoration.position.x - this.playerMesh.position.x) * scale;
@@ -3143,45 +3471,163 @@ export default class MultiplayerPlatformer {
         
         if (x >= 0 && x <= this.minimapCanvas.width && 
             y >= 0 && y <= this.minimapCanvas.height) {
-          // Draw NPCs as yellow dots
-          this.minimapContext.fillStyle = 'rgba(255, 255, 0, 0.8)';
+          
+          // Color based on NPC type
+          let npcColor = 'rgba(255, 255, 0, 0.9)'; // Default yellow
+          
+          if (decoration.userData.role === 'merchant') {
+            npcColor = 'rgba(0, 255, 255, 0.9)'; // Cyan for merchants
+          } else if (decoration.userData.role === 'quest') {
+            npcColor = 'rgba(255, 165, 0, 0.9)'; // Orange for quest givers
+          } else if (decoration.userData.npcType === 'enemy') {
+            npcColor = 'rgba(255, 0, 0, 0.9)'; // Red for enemies
+          }
+          
+          // Draw NPC dot
+          this.minimapContext.fillStyle = npcColor;
           this.minimapContext.beginPath();
           this.minimapContext.arc(x, y, 3 * scale, 0, Math.PI * 2);
           this.minimapContext.fill();
+          
+          // Add a small label for very close NPCs
+          const distanceToPlayer = Math.sqrt(
+            Math.pow(decoration.position.x - this.playerMesh.position.x, 2) +
+            Math.pow(decoration.position.z - this.playerMesh.position.z, 2)
+          );
+          
+          if (distanceToPlayer < 20 && decoration.userData.name) {
+            this.minimapContext.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            this.minimapContext.font = '8px Arial';
+            this.minimapContext.fillText(decoration.userData.name, x + 5, y + 3);
+          }
         }
       }
     }
     
-    // Draw other players
+    // Draw other players with player-specific colors and names
     this.players.forEach(player => {
       const x = centerX + (player.mesh.position.x - this.playerMesh.position.x) * scale;
       const y = centerY + (player.mesh.position.z - this.playerMesh.position.z) * scale;
       
-      if (x >= 0 && x <= this.minimapCanvas.width && 
-          y >= 0 && y <= this.minimapCanvas.height) {
-        // Draw other players as blue dots
-        this.minimapContext.fillStyle = 'rgba(0, 100, 255, 0.8)';
+      if (x >= -10 && x <= this.minimapCanvas.width + 10 && 
+          y >= -10 && y <= this.minimapCanvas.height + 10) {
+        
+        // Get player color from character
+        const playerColor = player.character ? this.getCharacterColor(player.character.name) : 0x0064FF;
+        const colorStr = `rgba(${(playerColor >> 16) & 255}, ${(playerColor >> 8) & 255}, ${playerColor & 255}, 0.9)`;
+        
+        // Draw player dot with pulsing effect
+        const pulseSize = 1 + 0.2 * Math.sin(Date.now() * 0.006);
+        
+        // Draw player dot
+        this.minimapContext.fillStyle = colorStr;
         this.minimapContext.beginPath();
-        this.minimapContext.arc(x, y, 3 * scale, 0, Math.PI * 2);
+        this.minimapContext.arc(x, y, 4 * scale * pulseSize, 0, Math.PI * 2);
         this.minimapContext.fill();
+        
+        // Draw player name if the minimap is in large mode
+        if (this.minimapDisplay.dataset.state === 'large' && player.character) {
+          this.minimapContext.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          this.minimapContext.font = '10px Arial';
+          this.minimapContext.fillText(player.character.name, x + 6, y + 4);
+        }
+        
+        // Draw player direction
+        if (player.mesh.rotation) {
+          const dirX = x + Math.sin(player.mesh.rotation.y) * 6 * scale;
+          const dirY = y - Math.cos(player.mesh.rotation.y) * 6 * scale;
+          this.minimapContext.beginPath();
+          this.minimapContext.moveTo(x, y);
+          this.minimapContext.lineTo(dirX, dirY);
+          this.minimapContext.strokeStyle = colorStr;
+          this.minimapContext.lineWidth = 1.5;
+          this.minimapContext.stroke();
+        }
       }
     });
     
-    // Draw player in center
-    this.minimapContext.fillStyle = 'rgba(255, 0, 0, 0.8)';
+    // Draw current player in center with pulsing effect
+    const pulseSize = 1 + 0.3 * Math.sin(Date.now() * 0.008);
+    
+    // Player dot
+    this.minimapContext.fillStyle = 'rgba(255, 0, 0, 0.9)';
     this.minimapContext.beginPath();
-    this.minimapContext.arc(centerX, centerY, 4 * scale, 0, Math.PI * 2);
+    this.minimapContext.arc(centerX, centerY, 5 * scale * pulseSize, 0, Math.PI * 2);
     this.minimapContext.fill();
     
-    // Draw player direction indicator
+    // Player direction indicator
     const dirX = centerX + Math.sin(this.playerMesh.rotation.y) * 8 * scale;
     const dirY = centerY - Math.cos(this.playerMesh.rotation.y) * 8 * scale;
     this.minimapContext.beginPath();
     this.minimapContext.moveTo(centerX, centerY);
     this.minimapContext.lineTo(dirX, dirY);
-    this.minimapContext.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+    this.minimapContext.strokeStyle = 'rgba(255, 0, 0, 0.9)';
     this.minimapContext.lineWidth = 2;
     this.minimapContext.stroke();
+    
+    // Add compass indicator in the top right corner
+    const compassRadius = 15;
+    const compassX = this.minimapCanvas.width - compassRadius - 5;
+    const compassY = compassRadius + 5;
+    
+    // Compass background
+    this.minimapContext.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    this.minimapContext.beginPath();
+    this.minimapContext.arc(compassX, compassY, compassRadius, 0, Math.PI * 2);
+    this.minimapContext.fill();
+    
+    // Compass border
+    this.minimapContext.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    this.minimapContext.lineWidth = 1;
+    this.minimapContext.beginPath();
+    this.minimapContext.arc(compassX, compassY, compassRadius, 0, Math.PI * 2);
+    this.minimapContext.stroke();
+    
+    // Compass directions (adjusted for player rotation)
+    const playerRotation = this.playerMesh.rotation.y;
+    
+    // North
+    const northX = compassX + Math.sin(playerRotation) * compassRadius * 0.7;
+    const northY = compassY - Math.cos(playerRotation) * compassRadius * 0.7;
+    this.minimapContext.fillStyle = 'rgba(255, 50, 50, 0.9)';
+    this.minimapContext.font = '10px Arial';
+    this.minimapContext.textAlign = 'center';
+    this.minimapContext.textBaseline = 'middle';
+    this.minimapContext.fillText('N', northX, northY);
+    
+    // South
+    const southX = compassX + Math.sin(playerRotation + Math.PI) * compassRadius * 0.7;
+    const southY = compassY - Math.cos(playerRotation + Math.PI) * compassRadius * 0.7;
+    this.minimapContext.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    this.minimapContext.fillText('S', southX, southY);
+    
+    // East
+    const eastX = compassX + Math.sin(playerRotation + Math.PI/2) * compassRadius * 0.7;
+    const eastY = compassY - Math.cos(playerRotation + Math.PI/2) * compassRadius * 0.7;
+    this.minimapContext.fillText('E', eastX, eastY);
+    
+    // West
+    const westX = compassX + Math.sin(playerRotation - Math.PI/2) * compassRadius * 0.7;
+    const westY = compassY - Math.cos(playerRotation - Math.PI/2) * compassRadius * 0.7;
+    this.minimapContext.fillText('W', westX, westY);
+    
+    // Reset text alignment
+    this.minimapContext.textAlign = 'start';
+    this.minimapContext.textBaseline = 'alphabetic';
+    
+    // Add current coordinates and zone info at the bottom
+    if (this.minimapDisplay.dataset.state === 'large') {
+      const coordsText = `X: ${Math.floor(this.playerMesh.position.x)} Z: ${Math.floor(this.playerMesh.position.z)} Y: ${Math.floor(this.playerMesh.position.y)}`;
+      const zoneText = `Zone: ${playerGridX},${playerGridZ}`;
+      
+      this.minimapContext.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      this.minimapContext.font = '10px Arial';
+      this.minimapContext.fillText(coordsText, 5, this.minimapCanvas.height - 15);
+      this.minimapContext.fillText(zoneText, 5, this.minimapCanvas.height - 5);
+      
+      // Show current theme
+      this.minimapContext.fillText(`Theme: ${this.currentTheme}`, this.minimapCanvas.width - 100, this.minimapCanvas.height - 5);
+    }
   }
   
   // Rotate camera around player
