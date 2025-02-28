@@ -16,6 +16,18 @@ export default class MultiplayerPlatformer {
     this.platforms = []; // Store platforms
     this.groundSegments = []; // Store ground segments
     
+    // Inventory system
+    this.inventory = {
+      items: [],
+      maxSize: 10,
+      activeItemIndex: -1
+    };
+    
+    // Quest system
+    this.quests = [];
+    this.activeQuest = null;
+    this.completedQuests = [];
+    
     // 360-degree world exploration
     this.exploredZones = new Set(); // Track which grid zones we've generated
     this.zoneSize = 50; // Size of each zone grid (50x50 units)
@@ -47,6 +59,87 @@ export default class MultiplayerPlatformer {
     this.playerCountDisplay.style.zIndex = '1000';
     this.playerCountDisplay.innerHTML = '<span>👥 Players: 1</span>';
     this.uiContainer.appendChild(this.playerCountDisplay);
+    
+    // Create inventory display
+    this.inventoryDisplay = document.createElement('div');
+    this.inventoryDisplay.className = 'inventory-display';
+    this.inventoryDisplay.style.position = 'absolute';
+    this.inventoryDisplay.style.bottom = '10px';
+    this.inventoryDisplay.style.right = '10px';
+    this.inventoryDisplay.style.color = 'white';
+    this.inventoryDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    this.inventoryDisplay.style.padding = '10px';
+    this.inventoryDisplay.style.borderRadius = '5px';
+    this.inventoryDisplay.style.fontFamily = 'Arial, sans-serif';
+    this.inventoryDisplay.style.zIndex = '1000';
+    this.inventoryDisplay.style.display = 'flex';
+    this.inventoryDisplay.style.flexDirection = 'column';
+    this.inventoryDisplay.style.gap = '5px';
+    this.inventoryDisplay.style.minWidth = '150px';
+    this.inventoryDisplay.style.pointerEvents = 'auto'; // Allow interaction
+    this.inventoryDisplay.innerHTML = '<h3 style="margin: 0 0 5px 0; text-align: center;">Inventory</h3><div class="inventory-slots"></div>';
+    this.uiContainer.appendChild(this.inventoryDisplay);
+    
+    // Create inventory slots
+    this.inventorySlots = this.inventoryDisplay.querySelector('.inventory-slots');
+    this.inventorySlots.style.display = 'grid';
+    this.inventorySlots.style.gridTemplateColumns = 'repeat(5, 1fr)';
+    this.inventorySlots.style.gap = '5px';
+    
+    // Create initial empty inventory slots
+    for (let i = 0; i < this.inventory.maxSize; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'inventory-slot';
+      slot.dataset.slotIndex = i;
+      slot.style.width = '30px';
+      slot.style.height = '30px';
+      slot.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+      slot.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+      slot.style.borderRadius = '3px';
+      slot.style.display = 'flex';
+      slot.style.justifyContent = 'center';
+      slot.style.alignItems = 'center';
+      slot.style.fontSize = '20px';
+      slot.style.cursor = 'pointer';
+      slot.addEventListener('click', () => this.useInventoryItem(i));
+      this.inventorySlots.appendChild(slot);
+    }
+    
+    // Create quest display
+    this.questDisplay = document.createElement('div');
+    this.questDisplay.className = 'quest-display';
+    this.questDisplay.style.position = 'absolute';
+    this.questDisplay.style.top = '10px';
+    this.questDisplay.style.left = '10px';
+    this.questDisplay.style.color = 'white';
+    this.questDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    this.questDisplay.style.padding = '10px';
+    this.questDisplay.style.borderRadius = '5px';
+    this.questDisplay.style.fontFamily = 'Arial, sans-serif';
+    this.questDisplay.style.zIndex = '1000';
+    this.questDisplay.style.maxWidth = '300px';
+    this.questDisplay.style.display = 'none'; // Initially hidden
+    this.questDisplay.innerHTML = '<h3 style="margin: 0 0 5px 0;">Current Quest</h3><div class="quest-info">No active quest</div><div class="quest-progress"></div>';
+    this.uiContainer.appendChild(this.questDisplay);
+    
+    // Create minimap
+    this.minimapDisplay = document.createElement('div');
+    this.minimapDisplay.className = 'minimap-display';
+    this.minimapDisplay.style.position = 'absolute';
+    this.minimapDisplay.style.bottom = '10px';
+    this.minimapDisplay.style.left = '10px';
+    this.minimapDisplay.style.width = '150px';
+    this.minimapDisplay.style.height = '150px';
+    this.minimapDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    this.minimapDisplay.style.borderRadius = '5px';
+    this.minimapDisplay.style.zIndex = '1000';
+    this.minimapDisplay.style.overflow = 'hidden';
+    this.minimapDisplay.innerHTML = '<canvas id="minimap-canvas" width="150" height="150"></canvas>';
+    this.uiContainer.appendChild(this.minimapDisplay);
+    
+    // Set up minimap canvas
+    this.minimapCanvas = document.getElementById('minimap-canvas');
+    this.minimapContext = this.minimapCanvas.getContext('2d');
     
     // Sound effects - using data URLs for better compatibility
     this.soundEffects = {
@@ -2230,10 +2323,35 @@ export default class MultiplayerPlatformer {
         }
         break;
       case 'f': // Attack key - common in many games
-      case 'e': // Alternative attack key
       case 'x': // Classic console action button
         this.keys.attack = true;
         this.performAttack();
+        break;
+      case 'e': // Interact key
+        // Interact with nearby objects or NPCs
+        this.interactWithNearbyObjects();
+        break;
+      case 'm':
+        // Toggle minimap size/visibility
+        this.toggleMinimap();
+        break;
+      case 'q':
+        // Toggle quest log
+        this.toggleQuestDisplay();
+        break;
+      case 'i':
+        // Toggle inventory display
+        this.toggleInventoryDisplay();
+        break;
+      case 'c':
+        // Rotate camera
+        this.rotateCamera();
+        break;
+      case '1': case '2': case '3': case '4': case '5':
+      case '6': case '7': case '8': case '9': case '0':
+        // Quick access inventory slots (0-9)
+        const slotIndex = (event.key === '0') ? 9 : parseInt(event.key) - 1;
+        this.useInventoryItem(slotIndex);
         break;
     }
   }
