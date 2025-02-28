@@ -682,10 +682,13 @@ export default class MultiplayerPlatformer {
   
   // Method to visualize other players' attacks
   showRemotePlayerAttack(position, color) {
+    // Ensure color is valid, default to white if not
+    const validColor = (color !== undefined && color !== null) ? color : 0xFFFFFF;
+    
     // Create a ring effect similar to the player's attack
     const attackGeometry = new THREE.RingGeometry(0.2, 0.8, 16);
     const attackMaterial = new THREE.MeshBasicMaterial({ 
-      color: color || 0xFFFFFF, 
+      color: validColor, 
       transparent: true, 
       opacity: 0.7,
       side: THREE.DoubleSide
@@ -700,7 +703,7 @@ export default class MultiplayerPlatformer {
     const particleCount = 15;
     const particleGeometry = new THREE.BufferGeometry();
     const particleMaterial = new THREE.PointsMaterial({
-      color: color || 0xFFFFFF,
+      color: validColor,
       size: 0.08,
       transparent: true,
       opacity: 0.7
