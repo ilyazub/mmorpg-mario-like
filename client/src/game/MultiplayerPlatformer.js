@@ -4546,24 +4546,30 @@ export default class MultiplayerPlatformer {
     // Play attack sound
     this.playSound('attack');
     
-    // Get player color for the attack effect
-    const playerColor = this.characterData ? this.getCharacterColor(this.characterData.name) : 0xFFD700;
+    // Get player color for the attack effect with defensive programming
+    const hasValidCharacter = this.characterData && typeof this.characterData === 'object' && this.characterData.name;
+    const playerColor = hasValidCharacter ? this.getCharacterColor(this.characterData.name) : 0xFFD700;
+    // Ensure color is valid
+    const validPlayerColor = (playerColor !== undefined && playerColor !== null) ? playerColor : 0xFFD700;
     
     // Check if attack boost is active
-    const hasAttackBoost = this.activeEffects.attackBoost > 0;
+    const hasAttackBoost = this.activeEffects && this.activeEffects.attackBoost > 0;
     const attackSize = hasAttackBoost ? 1.8 : 1.2; // Increased attack size (was 1.2/0.8)
     const attackRange = hasAttackBoost ? 2.5 : 1.8; // Increased attack range (was 1.8/1.2)
     const attackDuration = hasAttackBoost ? 450 : 350; // Slightly longer animation
     const attackCooldownTime = hasAttackBoost ? 12 : 18; // Reduced cooldown for better responsiveness
     
+    // Attack color will be red for boosted attacks, otherwise player color
+    const attackColor = hasAttackBoost ? 0xFF0000 : validPlayerColor;
+    
     // Create a visual effect for the attack (shockwave-like)
     const attackGeometry = new THREE.RingGeometry(0.3, attackSize, 24); // Increased precision and inner radius
     const attackMaterial = new THREE.MeshBasicMaterial({ 
-      color: hasAttackBoost ? 0xFF0000 : playerColor, // Red for boosted attacks 
+      color: attackColor, // Red for boosted attacks 
       transparent: true, 
       opacity: 0.8, // Increased opacity for better visibility
       side: THREE.DoubleSide,
-      emissive: hasAttackBoost ? 0xFF0000 : playerColor,
+      emissive: attackColor,
       emissiveIntensity: 0.5
     });
     const attackMesh = new THREE.Mesh(attackGeometry, attackMaterial);
@@ -4584,7 +4590,7 @@ export default class MultiplayerPlatformer {
     const particleCount = hasAttackBoost ? 30 : 20; // More particles with boost
     const particleGeometry = new THREE.BufferGeometry();
     const particleMaterial = new THREE.PointsMaterial({
-      color: hasAttackBoost ? 0xFF0000 : playerColor,
+      color: attackColor, // Use the already validated color
       size: hasAttackBoost ? 0.15 : 0.1, // Larger particles with boost
       transparent: true,
       opacity: 0.8
@@ -4640,7 +4646,7 @@ export default class MultiplayerPlatformer {
         y: attackMesh.position.y,
         z: attackMesh.position.z
       },
-      color: hasAttackBoost ? 0xFF0000 : playerColor
+      color: attackColor // Use the already validated color
     });
     
     // Animate the attack effect (growing ring)

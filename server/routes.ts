@@ -774,7 +774,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               type: 'obstacleState',
               id: data.id,
               position: data.position,
-              type: data.type
+              obstacleType: data.type
             });
             break;
             
