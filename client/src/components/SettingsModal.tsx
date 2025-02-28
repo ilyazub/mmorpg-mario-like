@@ -18,8 +18,22 @@ import {
   SelectTrigger,
   SelectValue
 } from './ui/select';
-import { GameSettings } from '../game/engine';
-import { GameSettings3D } from '../game/engine3d';
+
+// Define interfaces directly in this component
+interface GameSettings {
+  musicVolume: number;
+  sfxVolume: number;
+  pixelPerfect?: boolean;
+  showFPS: boolean;
+}
+
+interface GameSettings3D {
+  musicVolume: number;
+  sfxVolume: number;
+  showFPS: boolean;
+  shadows: boolean;
+  quality: 'low' | 'medium' | 'high';
+}
 
 // Create a type that includes both possible settings types
 type CombinedSettings = GameSettings & GameSettings3D;
