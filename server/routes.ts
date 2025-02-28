@@ -170,13 +170,11 @@ initializeGameWorld();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix with /api
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "healthy" });
-  });
+  // Health check moved to a single implementation below
   
   // Clear the SSR cache when requested (useful for deployments)
   app.post("/api/clear-cache", (req, res) => {
-    // No longer need page cache with simplified Vite approach
+    clearPageCache();
     res.json({ status: "success", message: "Page cache cleared" });
   });
 
