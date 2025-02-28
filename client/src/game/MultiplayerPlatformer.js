@@ -4896,19 +4896,6 @@ export default class MultiplayerPlatformer {
       const rotatedX = moveX * Math.cos(this.cameraAngleHorizontal) + moveZ * Math.sin(this.cameraAngleHorizontal);
       const rotatedZ = moveZ * Math.cos(this.cameraAngleHorizontal) - moveX * Math.sin(this.cameraAngleHorizontal);
       
-      console.log('Movement Calculation:', {
-        moveX, moveZ, 
-        keys: {
-          forward: this.keys.forward,
-          backward: this.keys.backward,
-          left: this.keys.left,
-          right: this.keys.right
-        },
-        cameraAngle: this.cameraAngleHorizontal,
-        rotatedX, rotatedZ,
-        effectiveSpeed
-      });
-      
       // Directly apply velocities - this is key for horizontal movement
       this.velocity.x = rotatedX;
       this.velocity.z = rotatedZ;
