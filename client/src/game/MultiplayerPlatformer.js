@@ -4425,15 +4425,19 @@ export default class MultiplayerPlatformer {
   checkCoinCollisions() {
     if (!this.playerMesh) return;
     
-    const playerBox = new THREE.Box3().setFromObject(this.playerMesh);
+    // Use more generous radius-based collection instead of box collision
+    const playerPosition = this.playerMesh.position.clone();
+    const collectionRadius = 2.0; // Increased radius for easier coin collection
     
     // Check coin collisions
     for (const coin of this.coins) {
       if (coin.userData.isCollected) continue;
       
-      const coinBox = new THREE.Box3().setFromObject(coin);
+      // Calculate distance between player and coin
+      const distance = playerPosition.distanceTo(coin.position);
       
-      if (playerBox.intersectsBox(coinBox)) {
+      // If player is within collection radius, collect the coin
+      if (distance < collectionRadius) {
         // Collect the coin
         coin.userData.isCollected = true;
         coin.visible = false;
@@ -4456,9 +4460,11 @@ export default class MultiplayerPlatformer {
     for (const powerUp of this.powerUps) {
       if (powerUp.userData.isCollected) continue;
       
-      const powerUpBox = new THREE.Box3().setFromObject(powerUp);
+      // Calculate distance between player and power-up
+      const distance = playerPosition.distanceTo(powerUp.position);
       
-      if (playerBox.intersectsBox(powerUpBox)) {
+      // If player is within collection radius, collect the power-up
+      if (distance < collectionRadius) {
         // Collect the power-up
         powerUp.userData.isCollected = true;
         powerUp.visible = false;
