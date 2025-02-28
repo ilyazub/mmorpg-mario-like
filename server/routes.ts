@@ -521,36 +521,253 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Set up WebSocket server for additional real-time communication if needed
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  // Set up WebSocket server with Socket.io-like protocol for compatibility
+  // Create WebSocket server with explicit handling of path and protocol
+  const wss = new WebSocketServer({ 
+    server: httpServer, 
+    path: '/ws',
+    perMessageDeflate: false // Disable compression for better compatibility
+  });
   
-  wss.on('connection', (ws) => {
-    console.log('WebSocket client connected');
+  // Track connected clients with their IDs and data
+  const wsClients = new Map<string, { 
+    ws: WebSocket, 
+    id: string,
+    playerData?: PlayerData 
+  }>();
+  
+  // Generate unique client IDs
+  let nextClientId = 1;
+  
+  wss.on('connection', (ws, req) => {
+    // Generate client ID
+    const clientId = `ws-client-${nextClientId++}`;
+    const clientIp = req.socket.remoteAddress || 'unknown';
     
-    ws.on('message', (message) => {
-      console.log('Received message:', message.toString());
-      
-      // Echo the message back
+    console.log(`WebSocket client connected: ${clientId} from ${clientIp}`);
+    wsClients.set(clientId, { ws, id: clientId });
+    
+    // Send initial connection confirmation
+    try {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ 
-          type: 'echo', 
-          message: message.toString(),
-          timestamp: Date.now()
+          type: 'connect', 
+          id: clientId,
+          message: 'Connected to WebSocket server',
+          timestamp: Date.now(),
+          clients: wsClients.size
         }));
+        
+        // Send list of current players to newly connected client
+        players.forEach((playerData, playerId) => {
+          if (playerId !== clientId) {
+            ws.send(JSON.stringify({
+              type: 'playerJoin',
+              id: playerId,
+              character: playerData.character,
+              position: playerData.position
+            }));
+          }
+        });
+        
+        // Send list of current obstacles to newly connected client
+        obstacles.forEach((obstacleData, obstacleId) => {
+          ws.send(JSON.stringify({
+            type: 'obstacleState',
+            id: obstacleId,
+            position: obstacleData.position,
+            type: obstacleData.type,
+            isCrushed: obstacleData.isCrushed || false
+          }));
+        });
+      }
+    } catch (error) {
+      console.error('Error sending welcome data:', error);
+    }
+    
+    // Handle incoming messages - parse Socket.io-like events
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        const type = data.type; // Event type/name
+        console.log(`Received ${type} event from client ${clientId}:`, data);
+        
+        // Handle different event types
+        switch (type) {
+          case 'selectCharacter':
+            // Store player data with default position
+            const character = data.character;
+            players.set(clientId, {
+              character,
+              position: { x: 0, y: 1, z: 0 }
+            });
+            
+            // Update local tracking
+            const clientData = wsClients.get(clientId);
+            if (clientData) {
+              clientData.playerData = players.get(clientId);
+              wsClients.set(clientId, clientData);
+            }
+            
+            // Broadcast to all other clients that a new player has joined
+            broadcastToOthers(clientId, {
+              type: 'playerJoin',
+              id: clientId,
+              character,
+              position: { x: 0, y: 1, z: 0 }
+            });
+            break;
+            
+          case 'updatePosition':
+            // Update player position in our records
+            if (players.has(clientId)) {
+              players.set(clientId, {
+                character: data.character,
+                position: data.position
+              });
+              
+              // Broadcast position update to all other players
+              broadcastToOthers(clientId, {
+                type: 'playerMove',
+                id: clientId,
+                position: data.position
+              });
+            }
+            break;
+            
+          case 'playerAttack':
+            // Broadcast the attack to all other players
+            broadcastToOthers(clientId, {
+              type: 'playerAttack',
+              id: clientId,
+              position: data.position,
+              color: data.color
+            });
+            break;
+            
+          case 'addObstacle':
+            // Store obstacle data in memory for real-time updates
+            obstacles.set(data.id, {
+              id: data.id,
+              position: data.position,
+              type: data.type
+            });
+            
+            // Also persist to storage
+            const worldId = data.worldId || DEFAULT_WORLD_ID;
+            try {
+              storage.createWorldObstacle({
+                worldId,
+                obstacleId: data.id,
+                type: data.type,
+                posX: Math.round(data.position.x),
+                posY: Math.round(data.position.y),
+                posZ: Math.round(data.position.z),
+                isCrushed: false
+              }).catch(err => console.error("Error persisting obstacle:", err));
+              
+              console.log(`Persisted obstacle ${data.id} to world ${worldId}`);
+            } catch (err) {
+              console.error("Error persisting obstacle:", err);
+            }
+            
+            // Broadcast to all other players about the new obstacle
+            broadcastToOthers(clientId, {
+              type: 'obstacleState',
+              id: data.id,
+              position: data.position,
+              type: data.type
+            });
+            break;
+            
+          case 'decorationCollision':
+            // Broadcast to other players to show decoration interaction
+            broadcastToOthers(clientId, {
+              type: 'decorationInteraction',
+              decorationId: data.decorationId,
+              position: data.position,
+              type: data.type,
+              playerId: clientId
+            });
+            break;
+            
+          default:
+            // Handle unknown message types
+            console.log(`Unhandled event type: ${type}`);
+            break;
+        }
+      } catch (error) {
+        console.error('Error processing message:', error);
+        
+        // Send error back to client
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: 'Error processing your message',
+            timestamp: Date.now()
+          }));
+        }
       }
     });
     
-    ws.on('close', () => {
-      console.log('WebSocket client disconnected');
+    // Function to broadcast to all other clients
+    function broadcastToOthers(senderId: string, data: any) {
+      wsClients.forEach((client, id) => {
+        if (id !== senderId && client.ws.readyState === WebSocket.OPEN) {
+          try {
+            client.ws.send(JSON.stringify(data));
+          } catch (error) {
+            console.error(`Error sending to client ${id}:`, error);
+          }
+        }
+      });
+    }
+    
+    // Handle websocket errors
+    ws.on('error', (error) => {
+      console.error(`WebSocket error for client ${clientId}:`, error);
+    });
+    
+    // Handle client disconnection
+    ws.on('close', (code, reason) => {
+      console.log(`WebSocket client disconnected: ${clientId} (code: ${code}, reason: ${reason || 'none'})`);
+      
+      // Remove from client tracking
+      wsClients.delete(clientId);
+      
+      // Remove from players list
+      players.delete(clientId);
+      
+      // Notify all other clients about player leaving
+      broadcastToAll({
+        type: 'playerLeave',
+        id: clientId
+      });
     });
   });
   
+  // Function to broadcast to all connected clients
+  function broadcastToAll(data: any) {
+    wsClients.forEach((client, id) => {
+      if (client.ws.readyState === WebSocket.OPEN) {
+        try {
+          client.ws.send(JSON.stringify(data));
+        } catch (error) {
+          console.error(`Error broadcasting to client ${id}:`, error);
+        }
+      }
+    });
+  }
+  
   // Add SSR route handler for all non-API routes - must be the last route
   app.get('*', (req, res, next) => {
-    // Skip API routes and static assets
-    if (req.path.startsWith('/api/') || 
-        req.path.startsWith('/assets/') ||
-        req.path.includes('.')) {
+    // Skip for client-side modules, static assets and API routes
+    if (req.path.includes('.') || 
+        req.path.startsWith('/src/') || 
+        req.path.startsWith('/node_modules/') || 
+        req.path.startsWith('/assets/') || 
+        req.path.startsWith('/api/') || 
+        req.originalUrl.includes('?')) {
       return next();
     }
     

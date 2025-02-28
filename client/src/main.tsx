@@ -1,3 +1,4 @@
+import React from 'react';
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
@@ -9,4 +10,16 @@ if (DEBUG) {
   console.log(`Debug mode: ${DEBUG ? 'enabled' : 'disabled'}`);
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+// Find the root element
+const rootElement = document.getElementById("root");
+
+if (!rootElement) {
+  console.error("Cannot find root element to mount application");
+} else {
+  // Create and render the app
+  createRoot(rootElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}

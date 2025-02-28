@@ -16,10 +16,19 @@ export const isProduction = NODE_ENV === 'production';
 export const getWebSocketURL = (): string => {
   // For production deploys, use the same host but with ws/wss protocol
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}`;
+  return `${protocol}//${window.location.host}/ws`;
 };
 
-// Socket.io configuration options
+// WebSocket configuration options
+export const webSocketOptions = {
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  maxReconnectionDelay: 5000,
+  timeout: 20000,
+  debug: !isProduction,
+};
+
+// Legacy Socket.io configuration options - keeping for backward compatibility
 export const socketOptions = {
   transports: ['websocket'] as const,
   reconnection: true,

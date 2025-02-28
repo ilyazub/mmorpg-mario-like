@@ -59,7 +59,7 @@ export interface MultiplayerPlatformerInterface {
 }
 
 declare class MultiplayerPlatformer implements MultiplayerPlatformerInterface {
-  constructor(container: HTMLElement);
+  constructor(container: HTMLElement, wsUrl?: string);
   
   isRunning: boolean;
   score: number;

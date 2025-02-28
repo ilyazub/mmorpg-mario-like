@@ -1,8 +1,14 @@
 import * as THREE from 'three';
-import { io } from 'socket.io-client';
+// Using native WebSockets instead of Socket.io
+// import { io } from 'socket.io-client';
 
 export default class MultiplayerPlatformer {
-  constructor(container) {
+  /**
+   * Initialize the multiplayer platformer game
+   * @param {HTMLElement} container - The container element for the game
+   * @param {string} [wsUrl] - Optional WebSocket URL for multiplayer features
+   */
+  constructor(container, wsUrl) {
     // Game state
     this.isRunning = false;
     this.score = 0;
@@ -15,6 +21,9 @@ export default class MultiplayerPlatformer {
     this.decorations = []; // Store decorative elements
     this.platforms = []; // Store platforms
     this.groundSegments = []; // Store ground segments
+    
+    // Store the WebSocket URL if provided
+    this.wsUrl = wsUrl;
     
     // Initialize noise parameters for procedural generation
     this.noiseScale = 0.1;
@@ -306,52 +315,44 @@ export default class MultiplayerPlatformer {
     // Initialize socket to avoid undefined errors
     this.socket = null;
     
-    // Socket.io connection with deployment support using environment configuration
+    // WebSocket connection with deployment support
     try {
-      // Default socket configuration
-      const defaultSocketOptions = {
-        transports: ['websocket'],
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 20000
-      };
-      
-      // Create socket connection with default options immediately
-      this.socket = io(undefined, defaultSocketOptions);
-      
-      // Protocol for WebSockets
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host = window.location.host;
-      console.log(`Connecting to socket server at ${protocol}//${host}`);
+      // If a WebSocket URL was directly provided to the constructor, use it
+      if (this.wsUrl) {
+        console.log(`Using provided WebSocket URL: ${this.wsUrl}`);
+        this.createDummySocket(); // This will use the wsUrl to create a real WebSocket
+      } else {
+        // Otherwise, try to determine the WebSocket URL from the environment or current URL
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const host = window.location.host;
+        this.wsUrl = `${protocol}//${host}/ws`; // Use standard /ws path
+        
+        console.log(`Using default WebSocket URL: ${this.wsUrl}`);
+        
+        // Create WebSocket with the determined URL
+        this.createDummySocket();
+        
+        // Try to load environment configuration for better settings
+        import('../env.ts').then(env => {
+          const envWsUrl = env.getWebSocketURL();
+          
+          // If the environment provides a different URL than what we're using, reconnect
+          if (envWsUrl && envWsUrl !== this.wsUrl && this.socket) {
+            // Disconnect current socket
+            this.socket.disconnect();
+            
+            // Update URL and reconnect
+            this.wsUrl = envWsUrl;
+            console.log(`Reconnecting to WebSocket server with environment URL: ${this.wsUrl}`);
+            this.createDummySocket();
+          }
+        }).catch(err => {
+          console.warn('Using default WebSocket configuration:', err.message);
+        });
+      }
       
       // Initialize socket events
       this.setupSocketEvents();
-      
-      // Try to load environment configuration for better settings
-      import('../env.ts').then(env => {
-        const envSocketOptions = env.socketOptions;
-        const wsUrl = env.getWebSocketURL();
-        
-        // Only reconnect with new options if significantly different
-        const shouldReconnect = 
-          JSON.stringify(envSocketOptions) !== JSON.stringify(defaultSocketOptions);
-        
-        if (shouldReconnect && this.socket) {
-          // Disconnect current socket
-          this.socket.disconnect();
-          
-          // Reconnect with environment settings
-          this.socket = io(undefined, envSocketOptions);
-          console.log(`Reconnecting to socket server with environment settings at ${wsUrl}`);
-          
-          // Reinitialize socket events
-          this.setupSocketEvents();
-        }
-      }).catch(err => {
-        console.warn('Using default socket configuration:', err.message);
-      });
     } catch (error) {
       console.error('Error initializing socket connection:', error);
       
@@ -500,7 +501,109 @@ export default class MultiplayerPlatformer {
   }
   
   // Create a dummy socket object with empty event handlers to prevent errors
+  /**
+   * Create a WebSocket connection using the provided URL or a dummy placeholder
+   */
   createDummySocket() {
+    // If WebSocket URL is provided, create a real WebSocket
+    if (this.wsUrl) {
+      try {
+        console.log(`Connecting to WebSocket server at ${this.wsUrl}`);
+        
+        // Create native WebSocket
+        const ws = new WebSocket(this.wsUrl);
+        
+        // Event handlers and callback storage
+        const eventHandlers = new Map();
+        
+        // Set up WebSocket event listeners
+        ws.onopen = () => {
+          console.log('WebSocket connected');
+          this.socketConnected = true;
+          
+          // Call any registered 'connect' handlers
+          if (eventHandlers.has('connect')) {
+            eventHandlers.get('connect').forEach(callback => callback());
+          }
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            // Parse message data
+            const data = JSON.parse(event.data);
+            const type = data.type;
+            
+            // Call handlers for this message type
+            if (eventHandlers.has(type)) {
+              eventHandlers.get(type).forEach(callback => callback(data));
+            }
+            
+            // Also call generic message handlers
+            if (eventHandlers.has('message')) {
+              eventHandlers.get('message').forEach(callback => callback(data));
+            }
+          } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+          }
+        };
+        
+        ws.onclose = () => {
+          console.log('WebSocket disconnected');
+          this.socketConnected = false;
+          
+          // Call any registered 'disconnect' handlers
+          if (eventHandlers.has('disconnect')) {
+            eventHandlers.get('disconnect').forEach(callback => callback());
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          
+          // Call any registered 'error' handlers
+          if (eventHandlers.has('error')) {
+            eventHandlers.get('error').forEach(callback => callback(error));
+          }
+        };
+        
+        // Create a Socket.io-like interface for compatibility
+        this.socket = {
+          // Add event listener
+          on: (event, callback) => {
+            if (!eventHandlers.has(event)) {
+              eventHandlers.set(event, []);
+            }
+            eventHandlers.get(event).push(callback);
+          },
+          
+          // Send event
+          emit: (event, data) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: event, ...data }));
+              return true;
+            }
+            return false;
+          },
+          
+          // Disconnect
+          disconnect: () => {
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+              ws.close();
+            }
+          },
+          
+          // Native WebSocket access
+          nativeSocket: ws
+        };
+        
+        return;
+      } catch (error) {
+        console.error('Failed to connect to WebSocket server:', error);
+        // Fall back to dummy socket on error
+      }
+    }
+    
+    // Create dummy socket if WebSocket connection failed or URL not provided
     this.socket = {
       on: (event, callback) => {
         console.log(`Dummy socket registered event: ${event}`);

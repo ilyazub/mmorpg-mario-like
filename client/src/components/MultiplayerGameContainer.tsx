@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { toast } from "@/hooks/use-toast";
 // @ts-ignore - Using JS module without type definitions
-import MultiplayerPlatformer from '../game/MultiplayerPlatformer.js';
+import MultiplayerPlatformer from '../game/MultiplayerPlatformer';
 import { Character } from '../game/engine';
+import { getWebSocketURL } from '../env';
 
 export default function MultiplayerGameContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -23,19 +25,35 @@ export default function MultiplayerGameContainer() {
     if (containerRef.current && !gameRef.current) {
       console.log('Initializing game and attaching event listeners');
       
-      // Initialize game on component mount
-      gameRef.current = new MultiplayerPlatformer(containerRef.current);
+      try {
+        // Initialize game on component mount with WebSocket URL
+        const wsUrl = getWebSocketURL();
+        console.log(`Initializing game with WebSocket URL: ${wsUrl}`);
+        
+        gameRef.current = new MultiplayerPlatformer(containerRef.current, wsUrl);
+        
+        // Notify user that game is ready
+        toast({
+          title: "Game Initialized",
+          description: "Multiplayer features are ready. Select a character to begin!",
+        });
+      } catch (error) {
+        console.error('Error initializing game:', error);
+        toast({
+          title: "Game Initialization Failed",
+          description: "There was a problem starting the game. Please try refreshing the page.",
+          variant: "destructive",
+        });
+      }
       
       // Manually attach key event handlers to make sure they're connected
       const handleKeyDown = (event: KeyboardEvent) => {
-        console.log(`Key down: ${event.key}`);
         if (gameRef.current) {
           gameRef.current.handleKeyDown(event);
         }
       };
       
       const handleKeyUp = (event: KeyboardEvent) => {
-        console.log(`Key up: ${event.key}`);
         if (gameRef.current) {
           gameRef.current.handleKeyUp(event);
         }
@@ -45,11 +63,19 @@ export default function MultiplayerGameContainer() {
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('keyup', handleKeyUp);
       
+      // Add resize handler
+      const handleResize = () => {
+        if (gameRef.current && typeof gameRef.current.handleResize === 'function') {
+          gameRef.current.handleResize();
+        }
+      };
+      window.addEventListener('resize', handleResize);
+      
       // Set up interval to update UI with game stats
       const statsInterval = setInterval(() => {
         if (gameRef.current) {
-          setScore(gameRef.current.score);
-          setLives(gameRef.current.lives);
+          setScore(gameRef.current.score || 0);
+          setLives(gameRef.current.lives || 3);
         }
       }, 500);
       
@@ -60,42 +86,91 @@ export default function MultiplayerGameContainer() {
         // Remove manually added event listeners
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
+        window.removeEventListener('resize', handleResize);
         
         // Clean up when component unmounts
         if (gameRef.current) {
-          window.removeEventListener('resize', gameRef.current.handleResize);
-          
-          // Disconnect socket
+          // Close WebSocket if it exists
           if (gameRef.current.socket) {
-            gameRef.current.socket.disconnect();
+            if (typeof gameRef.current.socket.disconnect === 'function') {
+              gameRef.current.socket.disconnect();
+            } else if (typeof gameRef.current.socket.close === 'function') {
+              gameRef.current.socket.close();
+            }
           }
         }
       };
     }
   }, []);
 
-  const startGame = () => {
-    if (gameRef.current && selectedCharacter) {
-      gameRef.current.startGame();
-      setIsGameStarted(true);
-    } else if (!selectedCharacter) {
-      alert("Please select a character first!");
+  const startGame = useCallback(() => {
+    if (!selectedCharacter) {
+      toast({
+        title: "Character Required",
+        description: "Please select a character before starting the game.",
+        variant: "destructive",
+      });
+      return;
     }
-  };
-
-  const restartGame = () => {
+    
     if (gameRef.current) {
-      gameRef.current.restartGame();
-      setIsGameStarted(true);
+      try {
+        gameRef.current.startGame();
+        setIsGameStarted(true);
+        toast({
+          title: "Game Started",
+          description: `Starting adventure with ${selectedCharacter.name}. Good luck!`,
+        });
+      } catch (error) {
+        console.error('Error starting game:', error);
+        toast({
+          title: "Game Start Failed",
+          description: "There was a problem starting the game. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
-  };
+  }, [selectedCharacter]);
 
-  const selectCharacter = (character: Character) => {
+  const restartGame = useCallback(() => {
+    if (gameRef.current) {
+      try {
+        gameRef.current.restartGame();
+        setIsGameStarted(true);
+        toast({
+          title: "Game Restarted",
+          description: "The game has been restarted. Good luck!",
+        });
+      } catch (error) {
+        console.error('Error restarting game:', error);
+        toast({
+          title: "Restart Failed",
+          description: "Failed to restart the game. Please refresh the page.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, []);
+
+  const selectCharacter = useCallback((character: Character) => {
     setSelectedCharacter(character);
     if (gameRef.current) {
-      gameRef.current.selectCharacter(character);
+      try {
+        gameRef.current.selectCharacter(character);
+        toast({
+          title: "Character Selected",
+          description: `${character.name} selected! Speed: ${character.speed}, Jump: ${character.jump}`,
+        });
+      } catch (error) {
+        console.error('Error selecting character:', error);
+        toast({
+          title: "Selection Failed",
+          description: "Failed to select character. Please try another one.",
+          variant: "destructive",
+        });
+      }
     }
-  };
+  }, []);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-b from-blue-400 to-blue-600">
