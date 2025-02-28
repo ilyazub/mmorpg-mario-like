@@ -4716,8 +4716,13 @@ export default class MultiplayerPlatformer {
     // Apply different effects based on power-up type
     switch (powerUpType) {
       case 'speedBoost':
+        // Save original speed if not already saved
+        if (!this.originalPlayerSpeed) {
+          this.originalPlayerSpeed = 0.15; // Base speed
+        }
+        
         // Increase player speed
-        this.playerSpeed = 0.3; // Double speed
+        this.playerSpeed = this.originalPlayerSpeed * 2.0; // Double speed
         this.activeEffects.speedBoost = 300; // 5 seconds at 60fps
         
         // Create visual indication
@@ -5115,7 +5120,8 @@ export default class MultiplayerPlatformer {
       
       // Reset to normal speed when effect expires
       if (this.activeEffects.speedBoost === 0) {
-        this.playerSpeed = 0.15; // Reset to normal speed
+        // Use the original player speed if available, otherwise default to 0.15
+        this.playerSpeed = this.originalPlayerSpeed || 0.15;
         console.log('Speed boost expired!');
       }
     }
