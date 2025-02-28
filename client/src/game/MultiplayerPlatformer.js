@@ -1285,16 +1285,22 @@ export default class MultiplayerPlatformer {
     this.exploredZones.add(zoneKey);
     const currentTheme = this.themeProperties[this.currentTheme];
     
-    // Create ground segment for this zone
-    const groundGeometry = new THREE.BoxGeometry(this.zoneSize, 1, this.zoneSize);
+    // Create ground segment for this zone - make it thicker and more visible
+    const groundGeometry = new THREE.BoxGeometry(this.zoneSize, 2, this.zoneSize);
     const groundMaterial = new THREE.MeshStandardMaterial({ 
       color: currentTheme.groundColor,
       roughness: 0.8,
-      metalness: 0.2
+      metalness: 0.2,
+      // Add a subtle wireframe pattern for better visibility
+      wireframe: false,
+      flatShading: true
     });
     
     const groundSegment = new THREE.Mesh(groundGeometry, groundMaterial);
-    groundSegment.position.set(worldX, -0.5, worldZ);
+    // Position ground so its top surface is at y=0
+    // Since the geometry height is 2 and the pivot is in the center, 
+    // setting y=-1 makes the top surface at y=0
+    groundSegment.position.set(worldX, -1, worldZ);
     groundSegment.receiveShadow = true;
     
     // Assign segment data for recycling later
@@ -4301,11 +4307,21 @@ export default class MultiplayerPlatformer {
     this.playerMesh.position.y += this.velocity.y;
     this.playerMesh.position.z += this.velocity.z;
     
-    // Check ground collision
-    if (this.playerMesh.position.y <= 0.5) { // Player height is 1, so center + 0.5 = bottom
-      this.playerMesh.position.y = 0.5;
+    // Check ground collision - make sure player stays above ground
+    const MIN_HEIGHT = 0.5; // Player height is 1, so center is 0.5 units above ground
+    if (this.playerMesh.position.y <= MIN_HEIGHT) {
+      // Snap player to ground level - prevent going below ground
+      this.playerMesh.position.y = MIN_HEIGHT;
+      // Reset vertical velocity
       this.velocity.y = 0;
+      // Allow jumping again since we're on solid ground
       this.isJumping = false;
+      
+      // If player is moving very fast downward, add a small bounce effect
+      if (this.velocity.y < -0.5) {
+        // Play landing sound effect
+        this.playSound('land');
+      }
     }
     
     // Check platform collisions
