@@ -1170,6 +1170,160 @@ export default class MultiplayerPlatformer {
   initWorld() {
     console.log('Initializing procedural world...');
     
+    // Create a textured terrain for ground
+    // Create a flat ground at y=0 with texture
+    const groundSize = 1000;
+    
+    // Create grass texture programmatically (for better performance than loading)
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext('2d');
+    
+    // Draw grass texture
+    context.fillStyle = '#2d8d30'; // Base grass color
+    context.fillRect(0, 0, 256, 256);
+    
+    // Add some variation
+    for (let i = 0; i < 1000; i++) {
+      const x = Math.random() * 256;
+      const y = Math.random() * 256;
+      const size = 1 + Math.random() * 3;
+      context.fillStyle = Math.random() > 0.5 ? '#3aad3e' : '#226d25';
+      context.fillRect(x, y, size, size);
+    }
+    
+    // Create texture from canvas
+    const grassTexture = new THREE.CanvasTexture(canvas);
+    grassTexture.wrapS = THREE.RepeatWrapping;
+    grassTexture.wrapT = THREE.RepeatWrapping;
+    grassTexture.repeat.set(20, 20);
+    
+    // Create ground material with texture
+    const groundMaterial = new THREE.MeshStandardMaterial({ 
+      map: grassTexture,
+      roughness: 0.8,
+      metalness: 0.2
+    });
+    
+    // Create a flat ground at y=0
+    const ground = new THREE.Mesh(
+      new THREE.BoxGeometry(groundSize, 1, groundSize),
+      groundMaterial
+    );
+    ground.position.set(0, -0.5, 0); // Center at origin, half height below
+    ground.receiveShadow = true;
+    this.scene.add(ground);
+    this.platforms.push(ground);
+    
+    // Add varied terrain features - hills and trees
+    this.addTerrainFeatures = function() {
+      console.log('Adding terrain features - hills and trees');
+      // Add hills and terrain variations
+      const hillCount = 15;
+      const hillSize = 40;
+      
+      // Create hills
+      for (let i = 0; i < hillCount; i++) {
+        // Random position within ground bounds
+        const posX = (Math.random() - 0.5) * 800;
+        const posZ = (Math.random() - 0.5) * 800;
+        
+        // Create a hill using a hemisphere
+        const hillGeometry = new THREE.SphereGeometry(
+          hillSize * (0.7 + Math.random() * 0.6), // Random size variation
+          16, 16, 
+          0, Math.PI * 2, 
+          0, Math.PI / 2 // Only the bottom half of sphere
+        );
+        
+        const hillMaterial = new THREE.MeshStandardMaterial({
+          color: 0x2d8d30,
+          roughness: 0.9,
+          metalness: 0.1
+        });
+        
+        const hill = new THREE.Mesh(hillGeometry, hillMaterial);
+        hill.position.set(posX, 0, posZ);
+        hill.receiveShadow = true;
+        hill.castShadow = true;
+        
+        this.scene.add(hill);
+        
+        // Add some trees on top of hills (with probability)
+        if (Math.random() > 0.4) {
+          const treeCount = 1 + Math.floor(Math.random() * 3);
+          
+          for (let j = 0; j < treeCount; j++) {
+            // Position trees on the hill
+            const treeAngle = Math.random() * Math.PI * 2;
+            const treeRadius = Math.random() * (hillSize * 0.5);
+            const treePosX = posX + Math.cos(treeAngle) * treeRadius;
+            const treePosZ = posZ + Math.sin(treeAngle) * treeRadius;
+            
+            // Get height at this position (approximated)
+            const distFromCenter = Math.sqrt(
+              Math.pow(treePosX - posX, 2) + 
+              Math.pow(treePosZ - posZ, 2)
+            );
+            
+            // Calculate height on hillside using parametric equation
+            const hillRadiusAtPoint = hillSize;
+            const heightRatio = 1 - Math.pow(distFromCenter / hillRadiusAtPoint, 2);
+            const treePosY = Math.max(0, heightRatio * hillSize * 0.5);
+            
+            this.createTree(treePosX, treePosY, treePosZ);
+          }
+        }
+      }
+      
+      // Add some random trees on flat ground
+      const flatTreeCount = 30;
+      
+      for (let i = 0; i < flatTreeCount; i++) {
+        const posX = (Math.random() - 0.5) * 800;
+        const posZ = (Math.random() - 0.5) * 800;
+        
+        this.createTree(posX, 0, posZ);
+      }
+    };
+    
+    this.createTree = function(x, y, z) {
+      // Create tree trunk
+      const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 3, 8);
+      const trunkMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8B4513, // Brown
+        roughness: 0.9,
+        metalness: 0.1
+      });
+      
+      const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+      trunk.position.set(x, y + 1.5, z); // Half height up
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      
+      // Create tree foliage
+      const foliageGeometry = new THREE.ConeGeometry(2, 4, 8);
+      const foliageMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2d6b30, // Dark green
+        roughness: 0.8,
+        metalness: 0.1
+      });
+      
+      const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+      foliage.position.set(0, 2.5, 0); // Position on top of trunk
+      foliage.castShadow = true;
+      foliage.receiveShadow = true;
+      
+      trunk.add(foliage);
+      this.scene.add(trunk);
+      
+      // Add trunk to decorations array to make it collidable
+      this.decorations.push(trunk);
+    };
+    
+    this.addTerrainFeatures();
+    
     // Update theme properties - leave existing ones, but enhance them with updated fields
     this.themeProperties = {
       'grassland': {
@@ -2476,9 +2630,14 @@ export default class MultiplayerPlatformer {
         this.keys.rotateRight = true;
         break;
       case ' ': // Space bar
+      case 'Spacebar': // For older browsers that use 'Spacebar' instead of ' '
+        // Set the jump flag
         this.keys.jump = true;
+        
+        // Only jump if on the ground
         if (!this.isJumping && this.isRunning) {
-          // Apply the jump force for a good upward momentum
+          console.log("JUMP triggered!");
+          // Apply the jump force for upward momentum
           this.velocity.y = this.jumpForce;
           this.isJumping = true;
           
@@ -2592,6 +2751,7 @@ export default class MultiplayerPlatformer {
         this.keys.rotateRight = false;
         break;
       case ' ': // Space bar
+      case 'Spacebar': // For older browsers that use 'Spacebar' instead of ' '
         this.keys.jump = false;
         break;
       case 'f': // Attack key
