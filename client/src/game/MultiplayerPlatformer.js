@@ -126,20 +126,47 @@ export default class MultiplayerPlatformer {
     this.minimapDisplay = document.createElement('div');
     this.minimapDisplay.className = 'minimap-display';
     this.minimapDisplay.style.position = 'absolute';
-    this.minimapDisplay.style.bottom = '10px';
-    this.minimapDisplay.style.left = '10px';
+    this.minimapDisplay.style.top = '20px';
+    this.minimapDisplay.style.right = '20px';
     this.minimapDisplay.style.width = '150px';
     this.minimapDisplay.style.height = '150px';
-    this.minimapDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    this.minimapDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
     this.minimapDisplay.style.borderRadius = '5px';
     this.minimapDisplay.style.zIndex = '1000';
     this.minimapDisplay.style.overflow = 'hidden';
+    this.minimapDisplay.style.border = '2px solid rgba(255, 255, 255, 0.3)';
+    this.minimapDisplay.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
+    this.minimapDisplay.dataset.state = 'normal';
     this.minimapDisplay.innerHTML = '<canvas id="minimap-canvas" width="150" height="150"></canvas>';
+    
+    // Add a label to indicate 'M' key can toggle minimap
+    const minimapLabel = document.createElement('div');
+    minimapLabel.style.position = 'absolute';
+    minimapLabel.style.bottom = '0';
+    minimapLabel.style.right = '0';
+    minimapLabel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    minimapLabel.style.color = 'white';
+    minimapLabel.style.padding = '2px 5px';
+    minimapLabel.style.fontSize = '10px';
+    minimapLabel.style.borderTopLeftRadius = '5px';
+    minimapLabel.innerHTML = 'Press M';
+    this.minimapDisplay.appendChild(minimapLabel);
+    
+    // Make minimap clickable
+    this.minimapDisplay.style.pointerEvents = 'auto';
+    this.minimapDisplay.addEventListener('click', (e) => {
+      if (e.target === this.minimapDisplay) {
+        this.toggleMinimap();
+      }
+    });
+    
     this.uiContainer.appendChild(this.minimapDisplay);
+    
+    // Minimap already created above, no need to call createMinimapUI
     
     // Set up minimap canvas
     this.minimapCanvas = document.getElementById('minimap-canvas');
-    this.minimapContext = this.minimapCanvas.getContext('2d');
+    this.minimapContext = this.minimapCanvas?.getContext('2d');
     
     // Create camera controls UI - arrow buttons for mobile
     this.cameraControls = document.createElement('div');
