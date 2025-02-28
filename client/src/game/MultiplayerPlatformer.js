@@ -2618,7 +2618,18 @@ export default class MultiplayerPlatformer {
     
     // Create a bounding box for the player
     const playerBox = new THREE.Box3().setFromObject(this.playerMesh);
+    const playerSize = new THREE.Vector3();
+    playerBox.getSize(playerSize);
     
+    // Calculate player dimensions
+    const playerWidth = playerSize.x;
+    const playerHeight = playerSize.y;
+    const playerDepth = playerSize.z;
+    
+    // Store original position to revert if collision occurs
+    const originalPosition = this.playerMesh.position.clone();
+    
+    // Check platform collisions
     for (const platform of this.platforms) {
       const platformBox = new THREE.Box3().setFromObject(platform);
       
@@ -2630,9 +2641,43 @@ export default class MultiplayerPlatformer {
         
         if (wasAbove && this.velocity.y < 0) {
           // Land on the platform
-          this.playerMesh.position.y = platformTop + 0.5; // 0.5 is half player height
+          this.playerMesh.position.y = platformTop + playerHeight / 2;
           this.velocity.y = 0;
           this.isJumping = false;
+        } else {
+          // Side or bottom collision - push player away
+          const overlap = new THREE.Vector3();
+          const platformSize = new THREE.Vector3();
+          platformBox.getSize(platformSize);
+          
+          // Calculate overlap in each direction
+          const xOverlap = (playerWidth + platformSize.x) / 2 - Math.abs(originalPosition.x - platform.position.x);
+          const yOverlap = (playerHeight + platformSize.y) / 2 - Math.abs(originalPosition.y - platform.position.y);
+          const zOverlap = (playerDepth + platformSize.z) / 2 - Math.abs(originalPosition.z - platform.position.z);
+          
+          // Find smallest overlap (to push in that direction)
+          if (xOverlap < yOverlap && xOverlap < zOverlap) {
+            // X-axis collision
+            const direction = originalPosition.x < platform.position.x ? -1 : 1;
+            this.playerMesh.position.x = platform.position.x + (direction * (platformSize.x + playerWidth) / 2);
+            this.velocity.x = 0;
+          } else if (yOverlap < zOverlap) {
+            // Y-axis collision (not from above)
+            if (originalPosition.y > platform.position.y) {
+              // Bottom collision - bounce down
+              this.playerMesh.position.y = platformBox.max.y + playerHeight / 2;
+              this.velocity.y = 0;
+            } else {
+              // Player hit ceiling - stop upward movement
+              this.playerMesh.position.y = platformBox.min.y - playerHeight / 2;
+              this.velocity.y = -0.1; // Small downward velocity
+            }
+          } else {
+            // Z-axis collision
+            const direction = originalPosition.z < platform.position.z ? -1 : 1;
+            this.playerMesh.position.z = platform.position.z + (direction * (platformSize.z + playerDepth) / 2);
+            this.velocity.z = 0;
+          }
         }
       }
     }
@@ -3974,45 +4019,163 @@ export default class MultiplayerPlatformer {
         const playerBottom = this.playerMesh.position.y - 0.5; // Bottom of player
         const obstacleTop = obstacle.position.y + 0.4; // Top of obstacle
         
+        // Set up health tracking for objects if not already set
+        if (obstacle.userData.hitPoints === undefined) {
+          // Set hit points based on strength or default to 1
+          obstacle.userData.hitPoints = obstacle.userData.strength || 1;
+          // Set NPC type (neutral by default)
+          obstacle.userData.npcType = obstacle.userData.npcType || 'neutral';
+        }
+        
         if (playerBottom >= obstacleTop && this.velocity.y < 0) {
-          // Crushing the obstacle!
-          this.crushObstacle(obstacle);
+          // Player jumped on obstacle from above
+          if (obstacle.userData.crushable) {
+            // Damage the obstacle
+            obstacle.userData.hitPoints--;
+            
+            // Check if fully destroyed
+            if (obstacle.userData.hitPoints <= 0) {
+              // Crushing the obstacle!
+              this.crushObstacle(obstacle);
+              
+              // Bounce the player up
+              this.velocity.y = this.jumpForce * 0.8;
+              
+              // Increase score
+              this.score += 50;
+              
+              // Create floating score text
+              this.createScorePopup(obstacle.position, 50);
+              
+              // Tell other players about the crushed obstacle
+              this.socket.emit('obstacleUpdate', {
+                id: obstacle.userData.id,
+                isCrushed: true
+              });
+              
+              // Chance to drop item when destroyed
+              if (Math.random() < 0.3) {
+                this.spawnRandomPowerUp(
+                  obstacle.position.x, 
+                  obstacle.position.y + 1, 
+                  obstacle.position.z
+                );
+              }
+            } else {
+              // Hit but not destroyed - visual feedback
+              const hitEffect = this.createHitImpactEffect(obstacle.position);
+              
+              // Bounce the player
+              this.velocity.y = this.jumpForce * 0.5;
+              
+              // Visual feedback - flash obstacle
+              const originalMaterial = obstacle.material.clone();
+              obstacle.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+              
+              setTimeout(() => {
+                if (obstacle && !obstacle.userData.isCrushed) {
+                  obstacle.material = originalMaterial;
+                }
+              }, 150);
+            }
+          } else {
+            // Not crushable, bounce off
+            this.velocity.y = this.jumpForce * 0.5;
+          }
+        } 
+        // Player attacking the obstacle
+        else if (this.isAttacking && !this.attackCooldown) {
+          // Set attack cooldown
+          this.attackCooldown = 15; // 15 frames cooldown
           
-          // Bounce the player up
-          this.velocity.y = this.jumpForce * 0.8;
+          // Damage the obstacle
+          obstacle.userData.hitPoints--;
           
-          // Increase score
-          this.score += 50;
-          console.log('Crushed obstacle! Score:', this.score);
+          // Create hit effect
+          this.createHitImpactEffect(obstacle.position);
           
-          // Tell other players about the crushed obstacle
-          this.socket.emit('obstacleUpdate', {
-            id: obstacle.userData.id,
-            isCrushed: true
-          });
+          // Check if enemy is destroyed
+          if (obstacle.userData.hitPoints <= 0) {
+            this.crushObstacle(obstacle);
+            
+            // Add points
+            this.score += 75;
+            this.createScorePopup(obstacle.position, 75);
+            
+            // Chance to drop a collectible item
+            if (Math.random() < 0.3) {
+              this.spawnRandomPowerUp(
+                obstacle.position.x, 
+                obstacle.position.y + 1, 
+                obstacle.position.z
+              );
+            }
+            
+            // Tell other players
+            this.socket.emit('obstacleUpdate', {
+              id: obstacle.userData.id,
+              isCrushed: true
+            });
+          } else {
+            // Visual feedback - knockback and flash
+            const knockbackDirection = new THREE.Vector3()
+              .subVectors(obstacle.position, this.playerMesh.position)
+              .normalize();
+            
+            obstacle.position.x += knockbackDirection.x * 0.3;
+            obstacle.position.z += knockbackDirection.z * 0.3;
+            
+            // Flash the obstacle red
+            const originalMaterial = obstacle.material.clone();
+            obstacle.material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            
+            setTimeout(() => {
+              if (obstacle && !obstacle.userData.isCrushed) {
+                obstacle.material = originalMaterial;
+              }
+            }, 150);
+          }
         } else {
-          // Player hit the obstacle without crushing it
+          // Player collided with obstacle sideways
           if (!obstacle.userData.isCrushed) {
-            // Player loses a life
-            this.lives -= 1;
-            console.log('Ouch! Lives remaining:', this.lives);
-            
-            // Knockback effect
-            const knockbackDirection = new THREE.Vector3();
-            knockbackDirection.subVectors(this.playerMesh.position, obstacle.position).normalize();
-            this.playerMesh.position.x += knockbackDirection.x * 2;
-            this.playerMesh.position.z += knockbackDirection.z * 2;
-            this.velocity.y = this.jumpForce * 0.5; // Small bounce
-            
-            // Create damage effect (red flash)
-            this.showPlayerDamageEffect();
-            
-            // Create enemy attack visual
-            this.showEnemyAttackEffect(obstacle.position);
-            
-            // Check for game over
-            if (this.lives <= 0) {
-              this.gameOver();
+            // Handle based on NPC type
+            if (obstacle.userData.npcType === 'neutral' || this.activeEffects.invincibility > 0) {
+              // Neutral NPCs just block movement - push player away
+              const direction = new THREE.Vector3()
+                .subVectors(this.playerMesh.position, obstacle.position)
+                .normalize();
+                
+              // Push away more strongly depending on NPC strength
+              const pushForce = 0.2 * (obstacle.userData.strength || 1);
+              this.playerMesh.position.x += direction.x * pushForce;
+              this.playerMesh.position.z += direction.z * pushForce;
+              
+              // Small bounce
+              this.velocity.y = 0.1;
+            } else {
+              // Hostile NPC - player takes damage
+              if (!this.activeEffects.invincibility) {
+                this.lives -= 1;
+                console.log('Ouch! Lives remaining:', this.lives);
+                
+                // Knockback effect
+                const knockbackDirection = new THREE.Vector3();
+                knockbackDirection.subVectors(this.playerMesh.position, obstacle.position).normalize();
+                this.playerMesh.position.x += knockbackDirection.x * 2;
+                this.playerMesh.position.z += knockbackDirection.z * 2;
+                this.velocity.y = this.jumpForce * 0.5; // Small bounce
+                
+                // Create damage effect (red flash)
+                this.showPlayerDamageEffect();
+                
+                // Create enemy attack visual
+                this.showEnemyAttackEffect(obstacle.position);
+                
+                // Check for game over
+                if (this.lives <= 0) {
+                  this.gameOver();
+                }
+              }
             }
           }
         }
