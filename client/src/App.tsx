@@ -34,7 +34,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className="min-h-screen flex flex-col">
-        <Header />
+        {/* Header hidden for better game experience */}
         <main className="flex-1">
           <Router />
         </main>
