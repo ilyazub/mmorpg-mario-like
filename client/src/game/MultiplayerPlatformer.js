@@ -2848,6 +2848,16 @@ export default class MultiplayerPlatformer {
       case 'ArrowLeft':
         this.keys.rotateLeft = true;
         break;
+      // Add quick camera reset with 'c' key
+      case 'c':
+        this.resetCamera();
+        break;
+      // Add quick 90-degree camera rotation with 'v' key
+      case 'v':
+        this.cameraAngleHorizontal += Math.PI/2; // Rotate 90 degrees instantly
+        this.playSound('powerUp');
+        this.showNotification("Camera rotated 90°", "info");
+        break;
       case 'ArrowRight':
         this.keys.rotateRight = true;
         break;
@@ -2924,16 +2934,7 @@ export default class MultiplayerPlatformer {
         // Toggle inventory display
         this.toggleInventoryDisplay();
         break;
-      case 'v':
-        // Rotate camera 90 degrees
-        this.cameraAngleHorizontal += Math.PI/2;
-        this.showNotification("Camera rotated", "info");
-        // Play a sound for feedback
-        this.playSound('powerUp');
-        break;
-      case 'c':
-        // Reset camera to default position
-        this.resetCamera();
+      // Already have v and c handlers above, removing duplicates
         break;
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9': case '0':
