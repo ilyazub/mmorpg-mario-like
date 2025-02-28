@@ -4565,12 +4565,11 @@ export default class MultiplayerPlatformer {
     // Create a visual effect for the attack (shockwave-like)
     const attackGeometry = new THREE.RingGeometry(0.3, attackSize, 24); // Increased precision and inner radius
     const attackMaterial = new THREE.MeshBasicMaterial({ 
-      color: attackColor, // Red for boosted attacks 
+      color: attackColor || 0xff0000, // Red for boosted attacks, with fallback
       transparent: true, 
       opacity: 0.8, // Increased opacity for better visibility
-      side: THREE.DoubleSide,
-      emissive: attackColor,
-      emissiveIntensity: 0.5
+      side: THREE.DoubleSide
+      // Note: MeshBasicMaterial doesn't support emissive properties
     });
     const attackMesh = new THREE.Mesh(attackGeometry, attackMaterial);
     
