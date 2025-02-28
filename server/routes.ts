@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { storage } from "./storage";
 import { Character } from "../shared/schema";
+import { pool } from "./db";
 
 interface PlayerData {
   character: Character;
@@ -162,12 +163,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint for monitoring and cron jobs
   app.get("/api/health", async (req, res) => {
     try {
-      // Test database connection
-      const dbStatus = await pool.query('SELECT 1 as health').then(result => ({
+      // Test database connection with proper type handling
+      const dbStatus = await pool.query('SELECT 1 as health').then((result: any) => ({
         status: 'ok',
         message: 'Database connection successful',
         timestamp: new Date().toISOString()
-      })).catch(err => ({
+      })).catch((err: Error) => ({
         status: 'error',
         message: `Database connection failed: ${err.message}`,
         timestamp: new Date().toISOString()
@@ -204,12 +205,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(503).json(healthInfo);
       }
-    } catch (error) {
+    } catch (error: unknown) {
+      // Handle error properly with type safety
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Health check failed:', error);
       res.status(500).json({
         status: 'error',
         message: 'Health check failed',
-        error: error.message,
+        errorDetail: errorMessage,
         timestamp: new Date().toISOString()
       });
     }
