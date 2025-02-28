@@ -2,12 +2,20 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { toast } from "@/hooks/use-toast";
-import { Character } from '../game/engine';
 import { getWebSocketURL } from '../env';
 import { useIsMobile } from '@/hooks/use-mobile';
 import MobileControls from './MobileControls';
 // Import Three.js directly here to make sure it's loaded before our game
 import * as THREE from 'three';
+
+// Character interface definition (moved from engine.ts)
+interface Character {
+  id: string;
+  name: string;
+  sprite: string;
+  speed: number;
+  jump: number;
+}
 
 export default function MultiplayerGameContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
