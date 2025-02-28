@@ -14,6 +14,7 @@ export default function MultiplayerGameContainer() {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  const [showTitle, setShowTitle] = useState(true);
   const [characters, setCharacters] = useState<Character[]>([
     { id: '1', name: 'Atlas', sprite: 'hero_red.png', speed: 5, jump: 10 },
     { id: '2', name: 'Nova', sprite: 'hero_blue.png', speed: 6, jump: 11 },
@@ -137,6 +138,7 @@ export default function MultiplayerGameContainer() {
       try {
         gameRef.current.startGame();
         setIsGameStarted(true);
+        setShowTitle(false);
         toast({
           title: "Game Started",
           description: `Starting adventure with ${selectedCharacter.name}. Good luck!`,
@@ -157,6 +159,7 @@ export default function MultiplayerGameContainer() {
       try {
         gameRef.current.restartGame();
         setIsGameStarted(true);
+        setShowTitle(false);
         toast({
           title: "Game Restarted",
           description: "The game has been restarted. Good luck!",
@@ -265,6 +268,25 @@ export default function MultiplayerGameContainer() {
         </div>
       )}
       
+      {/* Title Overlay - only visible before game starts */}
+      {showTitle && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+          <h1 className="text-6xl font-bold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] mb-4" 
+              style={{ 
+                fontFamily: "'Press Start 2P', cursive", 
+                background: "linear-gradient(to bottom, #ffffff, #7dcff7)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent"
+              }}>
+            HUBAOBA
+          </h1>
+          <p className="text-xl text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" 
+             style={{ fontFamily: "'VT323', monospace" }}>
+            A multiplayer 3D flying-platformer adventure
+          </p>
+        </div>
+      )}
+
       {/* Full-screen Game Container */}
       <div 
         ref={containerRef} 
