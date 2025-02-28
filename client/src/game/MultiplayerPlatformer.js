@@ -742,18 +742,32 @@ export default class MultiplayerPlatformer {
   addPlayer(id, character, position) {
     // Create a player mesh for the new player
     const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const playerColor = character ? this.getCharacterColor(character.name) : 0xff0000;
-    const material = new THREE.MeshLambertMaterial({ color: playerColor });
+    
+    // Defensive programming: ensure valid character and color
+    const hasValidCharacter = character && typeof character === 'object' && character.name;
+    const playerColor = hasValidCharacter ? this.getCharacterColor(character.name) : 0xff0000;
+    
+    // Ensure color is always valid
+    const validColor = (playerColor !== undefined && playerColor !== null) ? playerColor : 0xff0000;
+    
+    const material = new THREE.MeshLambertMaterial({ color: validColor });
     const playerMesh = new THREE.Mesh(geometry, material);
     
-    playerMesh.position.set(position.x, position.y, position.z);
+    // Use safe position values with defaults
+    const safePosition = {
+      x: position && typeof position.x === 'number' ? position.x : 0,
+      y: position && typeof position.y === 'number' ? position.y : 1,
+      z: position && typeof position.z === 'number' ? position.z : 0
+    };
+    
+    playerMesh.position.set(safePosition.x, safePosition.y, safePosition.z);
     playerMesh.castShadow = true;
     playerMesh.receiveShadow = true;
     
     // Add player name label
     const nameDiv = document.createElement('div');
     nameDiv.className = 'player-name-label';
-    nameDiv.textContent = character ? character.name : 'Player';
+    nameDiv.textContent = hasValidCharacter ? character.name : 'Player';
     nameDiv.style.position = 'absolute';
     nameDiv.style.color = 'white';
     nameDiv.style.background = 'rgba(0, 0, 0, 0.5)';
