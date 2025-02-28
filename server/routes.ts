@@ -58,7 +58,8 @@ async function renderPage(req: Request, res: Response, next: NextFunction): Prom
   if (process.env.NODE_ENV === 'production') {
     const cached = pageCache.get(route);
     if (cached && (now - cached.timestamp < CACHE_DURATION)) {
-      return res.send(cached.html);
+      res.send(cached.html);
+      return;
     }
   }
 
