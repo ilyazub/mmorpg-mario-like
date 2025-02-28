@@ -387,12 +387,13 @@ export default class MultiplayerPlatformer {
     
     // Player-related properties
     this.playerSpeed = 0.25;   // Increased for more responsive movement
-    this.jumpForce = 0.3;     // Increased jump force for better jumping
-    this.gravity = 0.008;     // Reduced gravity for smoother flying experience
+    this.jumpForce = 0.4;      // Increased jump force for better jumping
+    this.gravity = 0.015;      // Increased gravity to make player land after jumps
     this.isJumping = false;
-    this.isGrounded = false;  // Track if player is on ground
-    this.jumpCooldown = 0;    // Allow jumping again only after cooldown
-    this.coyoteTime = 0;      // Small window to jump after leaving platform
+    this.isGrounded = false;   // Track if player is on ground
+    this.jumpCooldown = 0;     // Allow jumping again only after cooldown
+    this.coyoteTime = 0;       // Small window to jump after leaving platform
+    this.terminalVelocity = -0.8; // Maximum falling speed to prevent too fast falling
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.playerMesh = null;
     this.characterData = null;
@@ -4876,13 +4877,24 @@ export default class MultiplayerPlatformer {
       this.jumpCooldown -= normalizedDelta;
     }
     
-    // Apply reduced gravity to vertical movement (better for flying)
+    // Apply gravity to vertical movement with terminal velocity limit
     if (!this.keys.jump) {
-      // Apply gravity only when not flying upward
+      // Apply gravity when not actively flying upward
       this.velocity.y -= this.gravity * normalizedDelta;
+      
+      // Apply terminal velocity to prevent excessive falling speed
+      if (this.velocity.y < this.terminalVelocity) {
+        this.velocity.y = this.terminalVelocity;
+      }
     } else {
-      // Apply a slight damping effect when actively flying to avoid excessive acceleration
-      this.velocity.y = Math.min(this.velocity.y, this.jumpForce * 0.6);
+      // When jump key is pressed, apply upward force (flying)
+      this.velocity.y = Math.max(this.velocity.y, 0); // Reset downward velocity
+      this.velocity.y += (this.jumpForce * 0.05 * normalizedDelta); // Apply gradual upward force
+      
+      // Limit maximum upward velocity
+      if (this.velocity.y > this.jumpForce) {
+        this.velocity.y = this.jumpForce;
+      }
     }
     
     // Coyote time for jump forgiveness - allow jumping shortly after leaving ground
@@ -4890,26 +4902,16 @@ export default class MultiplayerPlatformer {
       this.coyoteTime -= normalizedDelta;
     }
     
-    // Handle flying with jump key (modified for free flight)
+    // We've already handled jump controls in the gravity section above, 
+    // so we'll just add effects and sounds here
     if (this.keys.jump) {
-      // Calculate jump/flight force based on character data if available
-      const baseJumpForce = this.jumpForce * 0.5; // Reduced for smoother flying
-      const characterBonus = this.characterData ? (this.characterData.jump / 100) : 0;
-      const flightForce = baseJumpForce * (1 + characterBonus);
-      
-      // Apply upward force regardless of ground state - enables flying
-      this.velocity.y = flightForce;
-      
-      // Reset jump cooldown to allow continuous flying
-      this.jumpCooldown = 0;
-      
-      // Play flight sound occasionally
-      if (Math.random() < 0.05) {
+      // Play flight sound occasionally (reduced frequency)
+      if (Math.random() < 0.03) {
         this.playSound('jump');
       }
       
-      // Create flight effect particles
-      if (Math.random() < 0.1) {
+      // Create flight effect particles (reduced frequency)
+      if (Math.random() < 0.05) {
         this.createFlightEffect(this.playerMesh.position.clone());
       }
     }
