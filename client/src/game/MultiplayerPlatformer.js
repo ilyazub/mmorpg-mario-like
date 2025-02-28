@@ -385,7 +385,7 @@ export default class MultiplayerPlatformer {
     this.camera.lookAt(0, 0, 0);
     
     // Player-related properties
-    this.playerSpeed = 0.15;
+    this.playerSpeed = 0.25;   // Increased for more responsive movement
     this.jumpForce = 0.3;     // Increased jump force for better jumping
     this.gravity = 0.008;     // Reduced gravity for smoother flying experience
     this.isJumping = false;
@@ -2820,21 +2820,30 @@ export default class MultiplayerPlatformer {
   }
   
   handleKeyDown(event) {
+    // Prevent default browser behavior for game keys
+    if (['w', 'a', 's', 'd', ' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      event.preventDefault();
+    }
+    
     switch (event.key) {
       // Player movement with WASD
       case 'w':
+      case 'W':
         this.keys.forward = true;
         console.log('W key pressed - Forward:', this.keys.forward);
         break;
       case 's':
+      case 'S':
         this.keys.backward = true;
         console.log('S key pressed - Backward:', this.keys.backward);
         break;
       case 'a':
+      case 'A':
         this.keys.left = true;
         console.log('A key pressed - Left:', this.keys.left);
         break;
       case 'd':
+      case 'D':
         this.keys.right = true;
         console.log('D key pressed - Right:', this.keys.right);
         break;
@@ -2949,15 +2958,19 @@ export default class MultiplayerPlatformer {
     switch (event.key) {
       // Player movement
       case 'w':
+      case 'W':
         this.keys.forward = false;
         break;
       case 's':
+      case 'S':
         this.keys.backward = false;
         break;
       case 'a':
+      case 'A':
         this.keys.left = false;
         break;
       case 'd':
+      case 'D':
         this.keys.right = false;
         break;
       // Camera rotation
@@ -4759,16 +4772,19 @@ export default class MultiplayerPlatformer {
     // Handle active speed boost
     const speedMultiplier = this.activeEffects.speedBoost > 0 ? 1.5 : 1;
     
+    // Allow simultaneous key presses for diagonal movement
     if (this.keys.forward) {
       moveZ = -effectiveSpeed * speedMultiplier;
-    } else if (this.keys.backward) {
-      moveZ = effectiveSpeed * speedMultiplier;
+    }
+    if (this.keys.backward) {
+      moveZ += effectiveSpeed * speedMultiplier;
     }
     
     if (this.keys.left) {
       moveX = -effectiveSpeed * speedMultiplier;
-    } else if (this.keys.right) {
-      moveX = effectiveSpeed * speedMultiplier;
+    }
+    if (this.keys.right) {
+      moveX += effectiveSpeed * speedMultiplier;
     }
     
     // Apply camera rotation to movement direction
