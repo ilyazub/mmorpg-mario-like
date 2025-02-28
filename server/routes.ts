@@ -674,7 +674,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'obstacleState',
             id: obstacleId,
             position: obstacleData.position,
-            type: obstacleData.type,
+            obstacleType: obstacleData.type,
             isCrushed: obstacleData.isCrushed || false
           }));
         });
@@ -784,7 +784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               type: 'decorationInteraction',
               decorationId: data.decorationId,
               position: data.position,
-              type: data.type,
+              decorationType: data.type,
               playerId: clientId
             });
             break;
