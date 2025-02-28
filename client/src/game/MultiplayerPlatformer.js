@@ -2378,11 +2378,925 @@ export default class MultiplayerPlatformer {
         this.keys.jump = false;
         break;
       case 'f': // Attack key
-      case 'e': // Alternative attack key
       case 'x': // Classic console action button
         this.keys.attack = false;
         break;
     }
+  }
+  
+  // Function to interact with nearby objects
+  interactWithNearbyObjects() {
+    if (!this.playerMesh || !this.isRunning) return;
+    
+    console.log('Checking for interactions with nearby objects');
+    
+    // Get player position
+    const playerPosition = this.playerMesh.position.clone();
+    const interactionRadius = 3; // Units in world space
+    
+    // Variables to track the closest interactable
+    let closestDistance = Infinity;
+    let closestInteractable = null;
+    let interactableType = '';
+    
+    // Check for NPCs in range
+    for (const decoration of this.decorations) {
+      if (decoration.userData && decoration.userData.type === 'npc') {
+        const npcPosition = decoration.position.clone();
+        const distance = playerPosition.distanceTo(npcPosition);
+        
+        if (distance < interactionRadius && distance < closestDistance) {
+          closestDistance = distance;
+          closestInteractable = decoration;
+          interactableType = 'npc';
+        }
+      }
+    }
+    
+    // Check for other interactables like chests, switches, etc.
+    // (using the same pattern - loop through potential interactables)
+    
+    // Interact with the closest object found
+    if (closestInteractable) {
+      console.log(`Interacting with ${interactableType}:`, closestInteractable);
+      
+      if (interactableType === 'npc') {
+        this.startDialogueWithNPC(closestInteractable);
+      } else if (interactableType === 'chest') {
+        this.openChest(closestInteractable);
+      } else if (interactableType === 'quest') {
+        this.activateQuest(closestInteractable);
+      }
+      
+      // Create a visual interaction effect
+      this.createInteractionEffect(closestInteractable.position.clone());
+      
+      // Notify other players about the interaction
+      this.socket.emit('playerInteraction', {
+        interactableId: closestInteractable.userData.id,
+        interactableType: interactableType,
+        position: {
+          x: closestInteractable.position.x,
+          y: closestInteractable.position.y,
+          z: closestInteractable.position.z
+        }
+      });
+      
+      return true;
+    }
+    
+    console.log('No interactable objects in range');
+    return false;
+  }
+  
+  // Create a visual effect for interactions
+  createInteractionEffect(position) {
+    // Create a ripple effect
+    const rippleGeometry = new THREE.RingGeometry(0.2, 0.4, 32);
+    const rippleMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x00ffff, 
+      transparent: true, 
+      opacity: 0.7,
+      side: THREE.DoubleSide 
+    });
+    
+    const ripple = new THREE.Mesh(rippleGeometry, rippleMaterial);
+    ripple.position.copy(position);
+    ripple.position.y += 0.5; // Slightly above ground
+    ripple.rotation.x = Math.PI / 2; // Horizontal orientation
+    this.scene.add(ripple);
+    
+    // Animate the ripple
+    let scale = 1;
+    const animate = () => {
+      scale += 0.1;
+      ripple.scale.set(scale, scale, scale);
+      ripple.material.opacity = 0.7 - (scale - 1) / 5;
+      
+      if (scale < 6) {
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(ripple);
+      }
+    };
+    
+    animate();
+    this.playSound('powerUp');
+  }
+  
+  // Function to start dialogue with an NPC
+  startDialogueWithNPC(npc) {
+    // Get NPC data
+    const npcData = npc.userData;
+    
+    // Create or show dialogue UI
+    if (!this.dialogueBox) {
+      this.dialogueBox = document.createElement('div');
+      this.dialogueBox.className = 'dialogue-box';
+      this.dialogueBox.style.position = 'absolute';
+      this.dialogueBox.style.bottom = '20%';
+      this.dialogueBox.style.left = '50%';
+      this.dialogueBox.style.transform = 'translateX(-50%)';
+      this.dialogueBox.style.width = '80%';
+      this.dialogueBox.style.maxWidth = '600px';
+      this.dialogueBox.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+      this.dialogueBox.style.color = 'white';
+      this.dialogueBox.style.padding = '20px';
+      this.dialogueBox.style.borderRadius = '10px';
+      this.dialogueBox.style.fontFamily = 'Arial, sans-serif';
+      this.dialogueBox.style.zIndex = '1000';
+      this.dialogueBox.style.display = 'none';
+      this.dialogueBox.style.pointerEvents = 'auto';
+      this.uiContainer.appendChild(this.dialogueBox);
+    }
+    
+    // Generate dialogue content
+    const npcName = npcData.name || 'NPC';
+    const npcDialogue = this.getNPCDialogue(npcData);
+    const hasQuest = npcData.questId !== undefined;
+    
+    // Update dialogue box
+    this.dialogueBox.innerHTML = `
+      <h3>${npcName}</h3>
+      <p>${npcDialogue}</p>
+      <div class="dialogue-actions">
+        ${hasQuest ? '<button class="quest-btn">Accept Quest</button>' : ''}
+        <button class="close-btn">Close</button>
+      </div>
+    `;
+    
+    // Style the buttons
+    const buttons = this.dialogueBox.querySelectorAll('button');
+    buttons.forEach(button => {
+      button.style.padding = '8px 15px';
+      button.style.margin = '5px';
+      button.style.backgroundColor = '#4a90e2';
+      button.style.border = 'none';
+      button.style.borderRadius = '5px';
+      button.style.color = 'white';
+      button.style.cursor = 'pointer';
+    });
+    
+    // Add event listeners to buttons
+    if (hasQuest) {
+      const questBtn = this.dialogueBox.querySelector('.quest-btn');
+      questBtn.addEventListener('click', () => {
+        this.acceptQuest(npcData.questId);
+        this.dialogueBox.style.display = 'none';
+      });
+    }
+    
+    const closeBtn = this.dialogueBox.querySelector('.close-btn');
+    closeBtn.addEventListener('click', () => {
+      this.dialogueBox.style.display = 'none';
+    });
+    
+    // Show the dialogue box
+    this.dialogueBox.style.display = 'block';
+  }
+  
+  // Generate dialogue based on NPC data
+  getNPCDialogue(npcData) {
+    if (npcData.dialogue) {
+      return npcData.dialogue;
+    }
+    
+    // Default dialogues based on NPC type
+    const defaultDialogues = {
+      merchant: [
+        "Welcome traveler! Looking to trade?",
+        "I've got rare items for sale, if you have the coins.",
+        "My goods are the finest in the land!"
+      ],
+      villager: [
+        "Beautiful day, isn't it?",
+        "Watch out for the creatures beyond the village.",
+        "Have you seen the ancient temple to the north?"
+      ],
+      quest: [
+        "I need your help with something important.",
+        "A dangerous mission awaits, are you up for it?",
+        "There's a reward for anyone brave enough to help me."
+      ]
+    };
+    
+    const npcType = npcData.role || 'villager';
+    const dialogues = defaultDialogues[npcType] || defaultDialogues.villager;
+    
+    // Return a random dialogue from the options
+    return dialogues[Math.floor(Math.random() * dialogues.length)];
+  }
+  
+  // Accept a quest from an NPC
+  acceptQuest(questId) {
+    // Find the quest in available quests
+    const quest = this.quests.find(q => q.id === questId);
+    
+    if (!quest) {
+      console.error(`Quest with ID ${questId} not found`);
+      return;
+    }
+    
+    // Set as active quest
+    this.activeQuest = quest;
+    console.log(`Accepted quest: ${quest.title}`);
+    
+    // Update quest display
+    this.updateQuestDisplay();
+    
+    // Show quest acceptance notification
+    this.showNotification(`New Quest: ${quest.title}`, 'quest');
+  }
+  
+  // Activate a quest from a quest marker or object
+  activateQuest(questObject) {
+    // Get quest data from the object
+    const questData = questObject.userData;
+    
+    if (!questData || !questData.questId) {
+      console.error('Invalid quest object, missing questId');
+      return;
+    }
+    
+    // Add the quest to available quests if not already there
+    if (!this.quests.some(q => q.id === questData.questId)) {
+      // Create a new quest
+      const newQuest = {
+        id: questData.questId,
+        title: questData.questTitle || 'New Quest',
+        description: questData.questDescription || 'A new adventure awaits!',
+        objectives: questData.objectives || [
+          { id: 'obj1', description: 'Complete the quest', completed: false }
+        ],
+        rewards: questData.rewards || {
+          experience: 100,
+          gold: 50,
+          items: []
+        }
+      };
+      
+      this.quests.push(newQuest);
+    }
+    
+    // Accept the quest
+    this.acceptQuest(questData.questId);
+    
+    // Mark the quest object as activated
+    questObject.userData.isActivated = true;
+    
+    // Optional: Change appearance of the quest marker
+    if (questObject.material) {
+      questObject.material.color.set(0x888888); // Change to grey color
+    }
+  }
+  
+  // Update quest display with active quest information
+  updateQuestDisplay() {
+    if (!this.questDisplay) return;
+    
+    if (this.activeQuest) {
+      const questInfo = this.questDisplay.querySelector('.quest-info');
+      const questProgress = this.questDisplay.querySelector('.quest-progress');
+      
+      if (questInfo && questProgress) {
+        questInfo.innerHTML = `
+          <h4>${this.activeQuest.title}</h4>
+          <p>${this.activeQuest.description}</p>
+        `;
+        
+        let progressHTML = '<div class="objectives">';
+        this.activeQuest.objectives.forEach(objective => {
+          const completed = objective.completed ? '✓' : '□';
+          progressHTML += `<div>${completed} ${objective.description}</div>`;
+        });
+        progressHTML += '</div>';
+        
+        questProgress.innerHTML = progressHTML;
+      }
+      
+      this.questDisplay.style.display = 'block';
+    } else {
+      this.questDisplay.style.display = 'none';
+    }
+  }
+  
+  // Toggle quest display visibility
+  toggleQuestDisplay() {
+    if (!this.questDisplay) return;
+    
+    const isVisible = this.questDisplay.style.display !== 'none';
+    this.questDisplay.style.display = isVisible ? 'none' : 'block';
+    
+    if (!isVisible && this.activeQuest) {
+      this.updateQuestDisplay();
+    }
+  }
+  
+  // Toggle inventory display visibility
+  toggleInventoryDisplay() {
+    if (!this.inventoryDisplay) return;
+    
+    const isVisible = this.inventoryDisplay.style.display !== 'none';
+    this.inventoryDisplay.style.display = isVisible ? 'none' : 'block';
+    
+    if (!isVisible) {
+      this.updateInventoryDisplay();
+    }
+  }
+  
+  // Update inventory display with current items
+  updateInventoryDisplay() {
+    if (!this.inventorySlots) return;
+    
+    // Clear all slots first
+    const slots = this.inventorySlots.querySelectorAll('.inventory-slot');
+    slots.forEach((slot, index) => {
+      // Clear any existing content
+      slot.innerHTML = '';
+      slot.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+      
+      // Add item if exists at this index
+      const item = this.inventory.items[index];
+      if (item) {
+        // Create item display
+        const itemElement = document.createElement('div');
+        itemElement.className = 'inventory-item';
+        itemElement.style.width = '100%';
+        itemElement.style.height = '100%';
+        itemElement.style.display = 'flex';
+        itemElement.style.justifyContent = 'center';
+        itemElement.style.alignItems = 'center';
+        itemElement.style.fontSize = '20px';
+        
+        // Set background color based on item rarity
+        const rarityColors = {
+          common: 'rgba(150, 150, 150, 0.7)',
+          uncommon: 'rgba(30, 255, 30, 0.5)',
+          rare: 'rgba(30, 144, 255, 0.5)',
+          epic: 'rgba(147, 112, 219, 0.5)',
+          legendary: 'rgba(255, 165, 0, 0.5)'
+        };
+        
+        slot.style.backgroundColor = rarityColors[item.rarity] || rarityColors.common;
+        
+        // Set content based on item type
+        if (item.icon) {
+          itemElement.textContent = item.icon;
+        } else {
+          // Default icons by item type
+          const typeIcons = {
+            weapon: '⚔️',
+            armor: '🛡️',
+            potion: '🧪',
+            food: '🍗',
+            material: '📦',
+            treasure: '💎'
+          };
+          itemElement.textContent = typeIcons[item.type] || '📦';
+        }
+        
+        // Highlight active item
+        if (index === this.inventory.activeItemIndex) {
+          slot.style.border = '2px solid gold';
+        }
+        
+        // Add item tooltip
+        itemElement.title = `${item.name}\n${item.description || ''}`;
+        
+        slot.appendChild(itemElement);
+      }
+    });
+  }
+  
+  // Use an inventory item
+  useInventoryItem(slotIndex) {
+    if (slotIndex < 0 || slotIndex >= this.inventory.maxSize) return;
+    
+    const item = this.inventory.items[slotIndex];
+    if (!item) {
+      console.log(`No item in slot ${slotIndex}`);
+      return;
+    }
+    
+    console.log(`Using item: ${item.name}`);
+    
+    // Apply item effects based on type
+    switch (item.type) {
+      case 'potion':
+        this.applyPotionEffect(item);
+        // Remove consumable items after use
+        if (item.consumable) {
+          this.removeItemFromInventory(slotIndex);
+        }
+        break;
+      case 'weapon':
+        // Toggle active weapon
+        if (this.inventory.activeItemIndex === slotIndex) {
+          this.inventory.activeItemIndex = -1; // Deselect
+        } else {
+          this.inventory.activeItemIndex = slotIndex;
+        }
+        break;
+      case 'armor':
+        // Set as active armor
+        this.inventory.activeItemIndex = slotIndex;
+        break;
+      default:
+        // For other item types, just toggle active state
+        if (this.inventory.activeItemIndex === slotIndex) {
+          this.inventory.activeItemIndex = -1;
+        } else {
+          this.inventory.activeItemIndex = slotIndex;
+        }
+    }
+    
+    // Update inventory display
+    this.updateInventoryDisplay();
+    this.playSound('powerUp');
+  }
+  
+  // Apply potion effects
+  applyPotionEffect(potion) {
+    switch (potion.effect) {
+      case 'health':
+        this.lives = Math.min(this.lives + potion.value, 5);
+        this.showNotification(`+${potion.value} Health`, 'heal');
+        break;
+      case 'speed':
+        this.activeEffects.speedBoost = 900; // 15 seconds at 60fps
+        this.playerSpeed *= 1.5;
+        this.showNotification('Speed Boost!', 'buff');
+        break;
+      case 'jump':
+        this.activeEffects.jumpBoost = 900;
+        this.jumpForce *= 1.3;
+        this.showNotification('Jump Boost!', 'buff');
+        break;
+      case 'attack':
+        this.activeEffects.attackBoost = 900;
+        this.showNotification('Attack Boost!', 'buff');
+        break;
+    }
+  }
+  
+  // Remove an item from inventory
+  removeItemFromInventory(slotIndex) {
+    if (slotIndex < 0 || slotIndex >= this.inventory.items.length) return;
+    
+    // Remove the item
+    this.inventory.items.splice(slotIndex, 1);
+    
+    // Adjust active item index if needed
+    if (this.inventory.activeItemIndex === slotIndex) {
+      this.inventory.activeItemIndex = -1;
+    } else if (this.inventory.activeItemIndex > slotIndex) {
+      this.inventory.activeItemIndex--;
+    }
+    
+    // Update display
+    this.updateInventoryDisplay();
+  }
+  
+  // Add an item to inventory
+  addItemToInventory(item) {
+    if (this.inventory.items.length >= this.inventory.maxSize) {
+      console.log('Inventory is full');
+      return false;
+    }
+    
+    // Add the item
+    this.inventory.items.push(item);
+    
+    // Update display
+    this.updateInventoryDisplay();
+    
+    // Show notification
+    const rarityColors = {
+      common: '#aaaaaa',
+      uncommon: '#1eff1e',
+      rare: '#1e90ff',
+      epic: '#9370db',
+      legendary: '#ffa500'
+    };
+    
+    const color = rarityColors[item.rarity] || rarityColors.common;
+    this.showNotification(`Acquired: ${item.name}`, 'item', color);
+    
+    return true;
+  }
+  
+  // Show a notification
+  showNotification(message, type = 'info', color = 'white') {
+    // Create notification element if it doesn't exist
+    if (!this.notificationContainer) {
+      this.notificationContainer = document.createElement('div');
+      this.notificationContainer.className = 'notification-container';
+      this.notificationContainer.style.position = 'absolute';
+      this.notificationContainer.style.top = '60px';
+      this.notificationContainer.style.right = '10px';
+      this.notificationContainer.style.width = '250px';
+      this.notificationContainer.style.display = 'flex';
+      this.notificationContainer.style.flexDirection = 'column';
+      this.notificationContainer.style.gap = '10px';
+      this.notificationContainer.style.zIndex = '1000';
+      this.uiContainer.appendChild(this.notificationContainer);
+    }
+    
+    // Create the notification
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    notification.style.color = color;
+    notification.style.padding = '10px 15px';
+    notification.style.borderRadius = '5px';
+    notification.style.borderLeft = `4px solid ${color}`;
+    notification.style.fontFamily = 'Arial, sans-serif';
+    notification.style.transition = 'all 0.3s ease';
+    notification.style.opacity = '0';
+    notification.style.transform = 'translateX(50px)';
+    
+    // Add icon based on type
+    let icon = '';
+    switch (type) {
+      case 'quest': icon = '📜 '; break;
+      case 'item': icon = '🎁 '; break;
+      case 'heal': icon = '❤️ '; break;
+      case 'buff': icon = '⚡ '; break;
+      case 'warning': icon = '⚠️ '; break;
+      default: icon = 'ℹ️ ';
+    }
+    notification.textContent = icon + message;
+    
+    // Add to container
+    this.notificationContainer.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.style.opacity = '1';
+      notification.style.transform = 'translateX(0)';
+    }, 10);
+    
+    // Remove after timeout
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      notification.style.transform = 'translateX(50px)';
+      setTimeout(() => {
+        if (notification.parentNode === this.notificationContainer) {
+          this.notificationContainer.removeChild(notification);
+        }
+      }, 300);
+    }, 3000);
+  }
+  
+  // Toggle minimap size/visibility
+  toggleMinimap() {
+    if (!this.minimapDisplay) return;
+    
+    // Current state
+    const currentState = this.minimapDisplay.dataset.state || 'normal';
+    let newState;
+    
+    switch (currentState) {
+      case 'normal':
+        // Enlarge
+        this.minimapDisplay.style.width = '300px';
+        this.minimapDisplay.style.height = '300px';
+        this.minimapCanvas.width = 300;
+        this.minimapCanvas.height = 300;
+        newState = 'large';
+        break;
+      case 'large':
+        // Hide
+        this.minimapDisplay.style.display = 'none';
+        newState = 'hidden';
+        break;
+      case 'hidden':
+        // Show normal
+        this.minimapDisplay.style.display = 'block';
+        this.minimapDisplay.style.width = '150px';
+        this.minimapDisplay.style.height = '150px';
+        this.minimapCanvas.width = 150;
+        this.minimapCanvas.height = 150;
+        newState = 'normal';
+        break;
+    }
+    
+    this.minimapDisplay.dataset.state = newState;
+    this.updateMinimap();
+  }
+  
+  // Update minimap
+  updateMinimap() {
+    if (!this.minimapContext || !this.minimapCanvas || !this.playerMesh) return;
+    
+    // Clear the canvas
+    this.minimapContext.clearRect(0, 0, this.minimapCanvas.width, this.minimapCanvas.height);
+    
+    // Draw background
+    this.minimapContext.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    this.minimapContext.fillRect(0, 0, this.minimapCanvas.width, this.minimapCanvas.height);
+    
+    // Calculate scale and center based on minimap size
+    const scale = this.minimapCanvas.width / 200; // 200 world units shown on map
+    const centerX = this.minimapCanvas.width / 2;
+    const centerY = this.minimapCanvas.height / 2;
+    
+    // Draw platforms
+    this.minimapContext.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    for (const platform of this.platforms) {
+      const x = centerX + (platform.position.x - this.playerMesh.position.x) * scale;
+      const y = centerY + (platform.position.z - this.playerMesh.position.z) * scale;
+      
+      // Only draw if in viewport
+      if (x >= 0 && x <= this.minimapCanvas.width && 
+          y >= 0 && y <= this.minimapCanvas.height) {
+        this.minimapContext.fillRect(
+          x - 2 * scale, 
+          y - 2 * scale, 
+          4 * scale, 
+          4 * scale
+        );
+      }
+    }
+    
+    // Draw NPCs and special objects
+    for (const decoration of this.decorations) {
+      if (decoration.userData && decoration.userData.type === 'npc') {
+        const x = centerX + (decoration.position.x - this.playerMesh.position.x) * scale;
+        const y = centerY + (decoration.position.z - this.playerMesh.position.z) * scale;
+        
+        if (x >= 0 && x <= this.minimapCanvas.width && 
+            y >= 0 && y <= this.minimapCanvas.height) {
+          // Draw NPCs as yellow dots
+          this.minimapContext.fillStyle = 'rgba(255, 255, 0, 0.8)';
+          this.minimapContext.beginPath();
+          this.minimapContext.arc(x, y, 3 * scale, 0, Math.PI * 2);
+          this.minimapContext.fill();
+        }
+      }
+    }
+    
+    // Draw other players
+    this.players.forEach(player => {
+      const x = centerX + (player.mesh.position.x - this.playerMesh.position.x) * scale;
+      const y = centerY + (player.mesh.position.z - this.playerMesh.position.z) * scale;
+      
+      if (x >= 0 && x <= this.minimapCanvas.width && 
+          y >= 0 && y <= this.minimapCanvas.height) {
+        // Draw other players as blue dots
+        this.minimapContext.fillStyle = 'rgba(0, 100, 255, 0.8)';
+        this.minimapContext.beginPath();
+        this.minimapContext.arc(x, y, 3 * scale, 0, Math.PI * 2);
+        this.minimapContext.fill();
+      }
+    });
+    
+    // Draw player in center
+    this.minimapContext.fillStyle = 'rgba(255, 0, 0, 0.8)';
+    this.minimapContext.beginPath();
+    this.minimapContext.arc(centerX, centerY, 4 * scale, 0, Math.PI * 2);
+    this.minimapContext.fill();
+    
+    // Draw player direction indicator
+    const dirX = centerX + Math.sin(this.playerMesh.rotation.y) * 8 * scale;
+    const dirY = centerY - Math.cos(this.playerMesh.rotation.y) * 8 * scale;
+    this.minimapContext.beginPath();
+    this.minimapContext.moveTo(centerX, centerY);
+    this.minimapContext.lineTo(dirX, dirY);
+    this.minimapContext.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+    this.minimapContext.lineWidth = 2;
+    this.minimapContext.stroke();
+  }
+  
+  // Rotate camera around player
+  rotateCamera() {
+    if (!this.camera || !this.playerMesh) return;
+    
+    // Get current camera position relative to player
+    const relativeCameraPos = this.camera.position.clone().sub(this.playerMesh.position);
+    
+    // Rotate 90 degrees around player
+    const angle = Math.PI / 2;
+    const newX = relativeCameraPos.x * Math.cos(angle) - relativeCameraPos.z * Math.sin(angle);
+    const newZ = relativeCameraPos.x * Math.sin(angle) + relativeCameraPos.z * Math.cos(angle);
+    
+    // Set new position
+    this.camera.position.x = this.playerMesh.position.x + newX;
+    this.camera.position.z = this.playerMesh.position.z + newZ;
+    
+    // Look at player
+    this.camera.lookAt(this.playerMesh.position);
+  }
+  
+  // Open a chest to find items
+  openChest(chest) {
+    // Get chest data
+    const chestData = chest.userData;
+    
+    // Determine loot based on chest type/level
+    const loot = this.generateLoot(chestData);
+    
+    // Add items to inventory
+    let allItemsAdded = true;
+    for (const item of loot) {
+      const added = this.addItemToInventory(item);
+      if (!added) {
+        allItemsAdded = false;
+        break;
+      }
+    }
+    
+    // Create chest opening effect
+    this.createChestOpeningEffect(chest.position.clone());
+    
+    // Mark chest as opened
+    chest.userData.isOpened = true;
+    
+    // Change chest appearance if not all items could be collected
+    if (!allItemsAdded) {
+      this.showNotification('Inventory full! Some items remain in the chest.', 'warning');
+    }
+  }
+  
+  // Generate loot based on chest data
+  generateLoot(chestData) {
+    const loot = [];
+    const chestLevel = chestData.level || 1;
+    const itemCount = Math.floor(Math.random() * 3) + 1; // 1-3 items
+    
+    for (let i = 0; i < itemCount; i++) {
+      // Determine rarity based on chest level
+      let rarity = 'common';
+      const rarityRoll = Math.random() * 100;
+      
+      if (chestLevel >= 3 && rarityRoll >= 95) {
+        rarity = 'legendary';
+      } else if (chestLevel >= 2 && rarityRoll >= 85) {
+        rarity = 'epic';
+      } else if (rarityRoll >= 70) {
+        rarity = 'rare';
+      } else if (rarityRoll >= 40) {
+        rarity = 'uncommon';
+      }
+      
+      // Generate random item of appropriate rarity
+      const itemTypes = ['weapon', 'armor', 'potion', 'material'];
+      const type = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+      
+      // Create item based on type and rarity
+      const item = {
+        id: `item-${Date.now()}-${i}`,
+        name: this.generateItemName(type, rarity),
+        type,
+        rarity,
+        value: chestLevel * 10 * (this.getRarityValue(rarity)),
+        icon: this.getItemIcon(type)
+      };
+      
+      // Add type-specific properties
+      if (type === 'potion') {
+        item.effect = ['health', 'speed', 'jump', 'attack'][Math.floor(Math.random() * 4)];
+        item.value = chestLevel * 2;
+        item.consumable = true;
+        item.description = `Grants ${item.effect} boost when used.`;
+      } else if (type === 'weapon') {
+        item.damage = chestLevel * 5 * this.getRarityValue(rarity);
+        item.description = `Deals ${item.damage} damage.`;
+      } else if (type === 'armor') {
+        item.defense = chestLevel * 3 * this.getRarityValue(rarity);
+        item.description = `Provides ${item.defense} defense.`;
+      } else {
+        item.description = `A ${rarity} crafting material.`;
+      }
+      
+      loot.push(item);
+    }
+    
+    return loot;
+  }
+  
+  // Get numerical value multiplier for rarity
+  getRarityValue(rarity) {
+    switch (rarity) {
+      case 'legendary': return 5;
+      case 'epic': return 3;
+      case 'rare': return 2;
+      case 'uncommon': return 1.5;
+      default: return 1;
+    }
+  }
+  
+  // Generate a random item name
+  generateItemName(type, rarity) {
+    const prefixes = {
+      common: ['Basic', 'Simple', 'Plain', 'Standard'],
+      uncommon: ['Fine', 'Quality', 'Sturdy', 'Reliable'],
+      rare: ['Superior', 'Excellent', 'Reinforced', 'Enhanced'],
+      epic: ['Magnificent', 'Empowered', 'Exceptional', 'Arcane'],
+      legendary: ['Mythical', 'Ancient', 'Legendary', 'Divine']
+    };
+    
+    const typeNames = {
+      weapon: ['Sword', 'Axe', 'Dagger', 'Hammer', 'Staff'],
+      armor: ['Helmet', 'Chestplate', 'Gloves', 'Boots', 'Shield'],
+      potion: ['Potion', 'Elixir', 'Tonic', 'Brew', 'Concoction'],
+      material: ['Crystal', 'Ore', 'Essence', 'Fragment', 'Component']
+    };
+    
+    const prefix = prefixes[rarity][Math.floor(Math.random() * prefixes[rarity].length)];
+    const typeName = typeNames[type][Math.floor(Math.random() * typeNames[type].length)];
+    
+    return `${prefix} ${typeName}`;
+  }
+  
+  // Get icon for item type
+  getItemIcon(type) {
+    const icons = {
+      weapon: '⚔️',
+      armor: '🛡️',
+      potion: '🧪',
+      material: '📦',
+      food: '🍗',
+      treasure: '💎'
+    };
+    
+    return icons[type] || '📦';
+  }
+  
+  // Create chest opening effect
+  createChestOpeningEffect(position) {
+    // Particle effect
+    const particleCount = 30;
+    const particles = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xffd700, // Gold color
+        transparent: true,
+        opacity: 0.8
+      });
+      
+      const particle = new THREE.Mesh(geometry, material);
+      particle.position.copy(position);
+      particle.position.y += 0.5;
+      
+      // Random velocity
+      const velocity = {
+        x: (Math.random() - 0.5) * 0.1,
+        y: Math.random() * 0.2,
+        z: (Math.random() - 0.5) * 0.1
+      };
+      
+      this.scene.add(particle);
+      particles.push({ mesh: particle, velocity });
+    }
+    
+    // Add light flash
+    const light = new THREE.PointLight(0xffd700, 2, 5);
+    light.position.copy(position);
+    light.position.y += 1;
+    this.scene.add(light);
+    
+    // Animate particles
+    let frame = 0;
+    const animateParticles = () => {
+      frame++;
+      
+      // Update particles
+      particles.forEach(particle => {
+        particle.mesh.position.x += particle.velocity.x;
+        particle.mesh.position.y += particle.velocity.y;
+        particle.mesh.position.z += particle.velocity.z;
+        
+        // Apply gravity
+        particle.velocity.y -= 0.01;
+        
+        // Fade out
+        if (particle.mesh.material.opacity > 0) {
+          particle.mesh.material.opacity -= 0.02;
+        }
+      });
+      
+      // Dim light
+      if (light.intensity > 0) {
+        light.intensity -= 0.1;
+      }
+      
+      if (frame < 60) {
+        requestAnimationFrame(animateParticles);
+      } else {
+        // Clean up
+        particles.forEach(particle => {
+          this.scene.remove(particle.mesh);
+        });
+        this.scene.remove(light);
+      }
+    };
+    
+    animateParticles();
+    this.playSound('coin');
   }
   
   performAttack() {
@@ -3431,6 +4345,8 @@ export default class MultiplayerPlatformer {
       this.updateProceduralWorld();
       // Update parallax background effect
       this.updateParallaxLayers();
+      // Update minimap
+      this.updateMinimap();
     }
     
     // Decrease attack cooldown
