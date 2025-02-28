@@ -141,6 +141,37 @@ export default class MultiplayerPlatformer {
     this.minimapCanvas = document.getElementById('minimap-canvas');
     this.minimapContext = this.minimapCanvas.getContext('2d');
     
+    // Create camera rotation button for mobile
+    this.cameraRotateButton = document.createElement('div');
+    this.cameraRotateButton.className = 'camera-rotate-button';
+    this.cameraRotateButton.style.position = 'absolute';
+    this.cameraRotateButton.style.bottom = '170px';
+    this.cameraRotateButton.style.right = '20px';
+    this.cameraRotateButton.style.width = '60px';
+    this.cameraRotateButton.style.height = '60px';
+    this.cameraRotateButton.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    this.cameraRotateButton.style.borderRadius = '50%';
+    this.cameraRotateButton.style.display = 'flex';
+    this.cameraRotateButton.style.justifyContent = 'center';
+    this.cameraRotateButton.style.alignItems = 'center';
+    this.cameraRotateButton.style.fontSize = '24px';
+    this.cameraRotateButton.style.color = 'white';
+    this.cameraRotateButton.style.pointerEvents = 'auto';
+    this.cameraRotateButton.style.cursor = 'pointer';
+    this.cameraRotateButton.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
+    this.cameraRotateButton.innerHTML = '🔄';
+    this.cameraRotateButton.addEventListener('click', () => this.rotateCamera());
+    
+    // Add tooltip to explain functionality
+    this.cameraRotateButton.setAttribute('title', 'Rotate Camera (C)');
+    
+    this.uiContainer.appendChild(this.cameraRotateButton);
+    
+    // Create help message for camera rotation
+    setTimeout(() => {
+      this.showNotification('Press C or tap 🔄 to rotate camera view', 'info', '#4a90e2');
+    }, 3000);
+    
     // Sound effects - using data URLs for better compatibility
     this.soundEffects = {
       // Short beep sound for jump
@@ -3073,20 +3104,88 @@ export default class MultiplayerPlatformer {
   rotateCamera() {
     if (!this.camera || !this.playerMesh) return;
     
+    // Create camera direction indicator if it doesn't exist
+    if (!this.cameraIndicator) {
+      // Create a container for the indicator
+      this.cameraIndicator = document.createElement('div');
+      this.cameraIndicator.className = 'camera-direction-indicator';
+      this.cameraIndicator.style.position = 'absolute';
+      this.cameraIndicator.style.bottom = '20px';
+      this.cameraIndicator.style.right = '20px';
+      this.cameraIndicator.style.width = '60px';
+      this.cameraIndicator.style.height = '60px';
+      this.cameraIndicator.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      this.cameraIndicator.style.borderRadius = '50%';
+      this.cameraIndicator.style.display = 'flex';
+      this.cameraIndicator.style.justifyContent = 'center';
+      this.cameraIndicator.style.alignItems = 'center';
+      this.cameraIndicator.style.zIndex = '1000';
+      this.cameraIndicator.innerHTML = '<div class="camera-arrow">⬆️</div>';
+      
+      // Style the arrow
+      const arrow = this.cameraIndicator.querySelector('.camera-arrow');
+      arrow.style.fontSize = '24px';
+      arrow.style.transform = 'rotate(0deg)';
+      arrow.style.transition = 'transform 0.5s ease-out';
+      
+      this.uiContainer.appendChild(this.cameraIndicator);
+      
+      // Track camera rotation angle
+      this.cameraRotationAngle = 0;
+    }
+    
     // Get current camera position relative to player
     const relativeCameraPos = this.camera.position.clone().sub(this.playerMesh.position);
+    
+    // Store original camera position for animation
+    const originalX = this.camera.position.x;
+    const originalZ = this.camera.position.z;
     
     // Rotate 90 degrees around player
     const angle = Math.PI / 2;
     const newX = relativeCameraPos.x * Math.cos(angle) - relativeCameraPos.z * Math.sin(angle);
     const newZ = relativeCameraPos.x * Math.sin(angle) + relativeCameraPos.z * Math.cos(angle);
     
-    // Set new position
-    this.camera.position.x = this.playerMesh.position.x + newX;
-    this.camera.position.z = this.playerMesh.position.z + newZ;
+    // Calculate target position
+    const targetX = this.playerMesh.position.x + newX;
+    const targetZ = this.playerMesh.position.z + newZ;
     
-    // Look at player
-    this.camera.lookAt(this.playerMesh.position);
+    // Update camera rotation angle
+    this.cameraRotationAngle = (this.cameraRotationAngle + 90) % 360;
+    
+    // Update UI indicator
+    const arrow = this.cameraIndicator.querySelector('.camera-arrow');
+    arrow.style.transform = `rotate(${this.cameraRotationAngle}deg)`;
+    
+    // Play sound effect
+    this.playSound('powerUp');
+    
+    // Show notification
+    this.showNotification('Camera rotated', 'info', '#4a90e2');
+    
+    // Animate the camera rotation
+    let progress = 0;
+    const animationDuration = 20; // Number of frames for animation
+    const easeOutQuad = t => 1 - (1 - t) * (1 - t); // Easing function
+    
+    const animateCamera = () => {
+      progress++;
+      const t = easeOutQuad(progress / animationDuration);
+      
+      // Interpolate position
+      this.camera.position.x = originalX + (targetX - originalX) * t;
+      this.camera.position.z = originalZ + (targetZ - originalZ) * t;
+      
+      // Look at player
+      this.camera.lookAt(this.playerMesh.position);
+      
+      if (progress < animationDuration) {
+        requestAnimationFrame(animateCamera);
+      }
+    };
+    
+    // Start animation
+    animateCamera();
   }
   
   // Open a chest to find items
