@@ -313,8 +313,19 @@ export default class MultiplayerPlatformer {
       left: false,
       right: false,
       jump: false,
-      attack: false
+      attack: false,
+      // Camera rotation controls
+      rotateLeft: false,
+      rotateRight: false,
+      rotateUp: false,
+      rotateDown: false
     };
+    
+    // Camera orbit controls
+    this.cameraAngleHorizontal = 0;   // horizontal rotation in radians
+    this.cameraAngleVertical = 0.2;   // vertical angle in radians (slightly above horizon)
+    this.cameraDistance = 10;         // distance from player
+    this.cameraRotationSpeed = 0.05;  // rotation speed
     
     // Setup event listeners
     window.addEventListener('keydown', this.handleKeyDown.bind(this));
@@ -2327,21 +2338,31 @@ export default class MultiplayerPlatformer {
   
   handleKeyDown(event) {
     switch (event.key) {
+      // Player movement with WASD
       case 'w':
-      case 'ArrowUp':
         this.keys.forward = true;
         break;
       case 's':
-      case 'ArrowDown':
         this.keys.backward = true;
         break;
       case 'a':
-      case 'ArrowLeft':
         this.keys.left = true;
         break;
       case 'd':
-      case 'ArrowRight':
         this.keys.right = true;
+        break;
+      // Camera rotation with arrow keys
+      case 'ArrowUp':
+        this.keys.rotateUp = true;
+        break;
+      case 'ArrowDown':
+        this.keys.rotateDown = true;
+        break;
+      case 'ArrowLeft':
+        this.keys.rotateLeft = true;
+        break;
+      case 'ArrowRight':
+        this.keys.rotateRight = true;
         break;
       case ' ': // Space bar
         this.keys.jump = true;
@@ -2375,8 +2396,8 @@ export default class MultiplayerPlatformer {
         this.toggleInventoryDisplay();
         break;
       case 'c':
-        // Rotate camera
-        this.rotateCamera();
+        // Reset camera to default position
+        this.resetCamera();
         break;
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9': case '0':
@@ -2389,21 +2410,31 @@ export default class MultiplayerPlatformer {
   
   handleKeyUp(event) {
     switch (event.key) {
+      // Player movement
       case 'w':
-      case 'ArrowUp':
         this.keys.forward = false;
         break;
       case 's':
-      case 'ArrowDown':
         this.keys.backward = false;
         break;
       case 'a':
-      case 'ArrowLeft':
         this.keys.left = false;
         break;
       case 'd':
-      case 'ArrowRight':
         this.keys.right = false;
+        break;
+      // Camera rotation
+      case 'ArrowUp':
+        this.keys.rotateUp = false;
+        break;
+      case 'ArrowDown':
+        this.keys.rotateDown = false;
+        break;
+      case 'ArrowLeft':
+        this.keys.rotateLeft = false;
+        break;
+      case 'ArrowRight':
+        this.keys.rotateRight = false;
         break;
       case ' ': // Space bar
         this.keys.jump = false;
@@ -3691,21 +3722,47 @@ export default class MultiplayerPlatformer {
     // Apply gravity
     this.velocity.y -= this.gravity;
     
-    // Handle movement based on key presses
+    // Update camera rotation based on arrow keys
+    if (this.keys.rotateLeft) {
+      this.cameraAngleHorizontal += this.cameraRotationSpeed;
+    }
+    if (this.keys.rotateRight) {
+      this.cameraAngleHorizontal -= this.cameraRotationSpeed;
+    }
+    if (this.keys.rotateUp) {
+      this.cameraAngleVertical = Math.max(0.1, this.cameraAngleVertical - this.cameraRotationSpeed * 0.5);
+    }
+    if (this.keys.rotateDown) {
+      this.cameraAngleVertical = Math.min(1.0, this.cameraAngleVertical + this.cameraRotationSpeed * 0.5);
+    }
+    
+    // Calculate movement direction relative to camera angle
+    let moveX = 0;
+    let moveZ = 0;
+    
     if (this.keys.forward) {
-      this.velocity.z = -this.playerSpeed;
+      moveZ = -this.playerSpeed;
     } else if (this.keys.backward) {
-      this.velocity.z = this.playerSpeed;
-    } else {
-      this.velocity.z = 0;
+      moveZ = this.playerSpeed;
     }
     
     if (this.keys.left) {
-      this.velocity.x = -this.playerSpeed;
+      moveX = -this.playerSpeed;
     } else if (this.keys.right) {
-      this.velocity.x = this.playerSpeed;
+      moveX = this.playerSpeed;
+    }
+    
+    // Apply camera rotation to movement direction
+    if (moveX !== 0 || moveZ !== 0) {
+      // Calculate rotated movement vector based on camera angle
+      const rotatedX = moveX * Math.cos(this.cameraAngleHorizontal) + moveZ * Math.sin(this.cameraAngleHorizontal);
+      const rotatedZ = moveZ * Math.cos(this.cameraAngleHorizontal) - moveX * Math.sin(this.cameraAngleHorizontal);
+      
+      this.velocity.x = rotatedX;
+      this.velocity.z = rotatedZ;
     } else {
       this.velocity.x = 0;
+      this.velocity.z = 0;
     }
     
     // Update player position
@@ -3726,10 +3783,20 @@ export default class MultiplayerPlatformer {
     // Check coin collisions
     this.checkCoinCollisions();
     
-    // Update camera to follow player
-    this.camera.position.x = this.playerMesh.position.x;
-    this.camera.position.z = this.playerMesh.position.z + 10;
-    this.camera.lookAt(this.playerMesh.position);
+    // Update camera position based on orbit parameters
+    const playerPos = this.playerMesh.position;
+    
+    // Calculate camera position based on orbit parameters
+    const offsetX = 10 * Math.sin(this.cameraAngleHorizontal) * Math.cos(this.cameraAngleVertical);
+    const offsetY = 10 * Math.sin(this.cameraAngleVertical) + 5; // Add height offset
+    const offsetZ = 10 * Math.cos(this.cameraAngleHorizontal) * Math.cos(this.cameraAngleVertical);
+    
+    this.camera.position.x = playerPos.x + offsetX;
+    this.camera.position.y = playerPos.y + offsetY;
+    this.camera.position.z = playerPos.z + offsetZ;
+    
+    // Make camera look at player
+    this.camera.lookAt(playerPos);
     
     // Send position update to server
     if (this.characterData) {
@@ -3742,6 +3809,16 @@ export default class MultiplayerPlatformer {
         }
       });
     }
+  }
+  
+  // Reset camera to default position
+  resetCamera() {
+    this.cameraAngleHorizontal = 0;
+    this.cameraAngleVertical = 0.2;
+    this.playSound('powerUp');
+    
+    // Add a visual effect
+    this.showNotification("Camera reset", "info");
   }
   
   checkPlatformCollisions() {
