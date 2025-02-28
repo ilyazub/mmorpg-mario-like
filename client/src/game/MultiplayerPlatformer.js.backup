@@ -3187,65 +3187,8 @@ export default class MultiplayerPlatformer {
   // Rotate camera around player
   // This function is no longer used and replaced with resetCamera()
   rotateCamera() {
-    if (!this.camera || !this.playerMesh) return;
-    
-    // Get current camera position relative to player
-    var relativeCameraPos = this.camera.position.clone().sub(this.playerMesh.position);
-    
-    // Store original camera position for animation
-    var originalX = this.camera.position.x;
-    var originalZ = this.camera.position.z;
-    
-    // Rotate 90 degrees around player
-    var angle = Math.PI / 2;
-    var newX = relativeCameraPos.x * Math.cos(angle) - relativeCameraPos.z * Math.sin(angle);
-    var newZ = relativeCameraPos.x * Math.sin(angle) + relativeCameraPos.z * Math.cos(angle);
-    
-    // Calculate target position
-    var targetX = this.playerMesh.position.x + newX;
-    var targetZ = this.playerMesh.position.z + newZ;
-    
-    // Update camera rotation angle
-    this.cameraRotationAngle = (this.cameraRotationAngle + 90) % 360;
-    
-    // Update UI indicator
-    if (this.cameraIndicator) {
-      var arrow = this.cameraIndicator.querySelector('.camera-arrow');
-      if (arrow) {
-        arrow.style.transform = `rotate(${this.cameraRotationAngle}deg)`;
-      }
-    }
-    
-    // Play sound effect
-    this.playSound('powerUp');
-    
-    // Show notification
-    this.showNotification('Camera rotated', 'info', '#4a90e2');
-    
-    // Animate the camera rotation
-    var progress = 0;
-    var animationDuration = 20; // Number of frames for animation
-    var easeOutQuad = function(t) { return 1 - (1 - t) * (1 - t); }; // Easing function
-    
-    var self = this;
-    function animateCamera() {
-      progress++;
-      var t = easeOutQuad(progress / animationDuration);
-      
-      // Interpolate position
-      self.camera.position.x = originalX + (targetX - originalX) * t;
-      self.camera.position.z = originalZ + (targetZ - originalZ) * t;
-      
-      // Look at player
-      self.camera.lookAt(self.playerMesh.position);
-      
-      if (progress < animationDuration) {
-        requestAnimationFrame(animateCamera);
-      }
-    }
-    
-    // Start animation
-    animateCamera();
+    // Simply call resetCamera to maintain backward compatibility
+    this.resetCamera();
   }
   
   // Reset camera to default position
@@ -3261,6 +3204,60 @@ export default class MultiplayerPlatformer {
     
     // Play a sound for feedback
     this.playSound('powerUp');
+  }
+    
+    // Get current camera position relative to player
+    const relativeCameraPos = this.camera.position.clone().sub(this.playerMesh.position);
+    
+    // Store original camera position for animation
+    const originalX = this.camera.position.x;
+    const originalZ = this.camera.position.z;
+    
+    // Rotate 90 degrees around player
+    const angle = Math.PI / 2;
+    const newX = relativeCameraPos.x * Math.cos(angle) - relativeCameraPos.z * Math.sin(angle);
+    const newZ = relativeCameraPos.x * Math.sin(angle) + relativeCameraPos.z * Math.cos(angle);
+    
+    // Calculate target position
+    const targetX = this.playerMesh.position.x + newX;
+    const targetZ = this.playerMesh.position.z + newZ;
+    
+    // Update camera rotation angle
+    this.cameraRotationAngle = (this.cameraRotationAngle + 90) % 360;
+    
+    // Update UI indicator
+    const arrow = this.cameraIndicator.querySelector('.camera-arrow');
+    arrow.style.transform = `rotate(${this.cameraRotationAngle}deg)`;
+    
+    // Play sound effect
+    this.playSound('powerUp');
+    
+    // Show notification
+    this.showNotification('Camera rotated', 'info', '#4a90e2');
+    
+    // Animate the camera rotation
+    let progress = 0;
+    const animationDuration = 20; // Number of frames for animation
+    const easeOutQuad = t => 1 - (1 - t) * (1 - t); // Easing function
+    
+    const animateCamera = () => {
+      progress++;
+      const t = easeOutQuad(progress / animationDuration);
+      
+      // Interpolate position
+      this.camera.position.x = originalX + (targetX - originalX) * t;
+      this.camera.position.z = originalZ + (targetZ - originalZ) * t;
+      
+      // Look at player
+      this.camera.lookAt(this.playerMesh.position);
+      
+      if (progress < animationDuration) {
+        requestAnimationFrame(animateCamera);
+      }
+    };
+    
+    // Start animation
+    animateCamera();
   }
   
   // Open a chest to find items

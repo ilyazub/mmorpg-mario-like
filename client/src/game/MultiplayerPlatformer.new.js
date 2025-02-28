@@ -374,11 +374,11 @@ export default class MultiplayerPlatformer {
       rotateDown: false
     };
     
-    // Camera orbit parameters
+    // Camera orbit controls
     this.cameraAngleHorizontal = 0;   // horizontal rotation in radians
     this.cameraAngleVertical = 0.2;   // vertical angle in radians (slightly above horizon)
     this.cameraDistance = 10;         // distance from player
-    this.cameraRotationSpeed = 0.05;  // rotation speed per frame
+    this.cameraRotationSpeed = 0.05;  // rotation speed
     
     // Setup event listeners
     window.addEventListener('keydown', this.handleKeyDown.bind(this));
@@ -2452,6 +2452,10 @@ export default class MultiplayerPlatformer {
         // Reset camera to default position
         this.resetCamera();
         break;
+      case 'v':
+        // Rotate camera by 90 degrees
+        this.rotateCamera();
+        break;
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9': case '0':
         // Quick access inventory slots (0-9)
@@ -3184,8 +3188,7 @@ export default class MultiplayerPlatformer {
     this.minimapContext.stroke();
   }
   
-  // Rotate camera around player
-  // This function is no longer used and replaced with resetCamera()
+  // Rotate camera around player by 90 degrees
   rotateCamera() {
     if (!this.camera || !this.playerMesh) return;
     
@@ -3206,9 +3209,10 @@ export default class MultiplayerPlatformer {
     var targetZ = this.playerMesh.position.z + newZ;
     
     // Update camera rotation angle
+    if (!this.cameraRotationAngle) this.cameraRotationAngle = 0;
     this.cameraRotationAngle = (this.cameraRotationAngle + 90) % 360;
     
-    // Update UI indicator
+    // Update UI indicator if it exists
     if (this.cameraIndicator) {
       var arrow = this.cameraIndicator.querySelector('.camera-arrow');
       if (arrow) {
@@ -3225,12 +3229,11 @@ export default class MultiplayerPlatformer {
     // Animate the camera rotation
     var progress = 0;
     var animationDuration = 20; // Number of frames for animation
-    var easeOutQuad = function(t) { return 1 - (1 - t) * (1 - t); }; // Easing function
-    
     var self = this;
+    
     function animateCamera() {
       progress++;
-      var t = easeOutQuad(progress / animationDuration);
+      var t = 1 - (1 - progress / animationDuration) * (1 - progress / animationDuration); // easeOutQuad
       
       // Interpolate position
       self.camera.position.x = originalX + (targetX - originalX) * t;
