@@ -387,13 +387,13 @@ export default class MultiplayerPlatformer {
     
     // Player-related properties
     this.playerSpeed = 0.25;   // Increased for more responsive movement
-    this.jumpForce = 0.4;      // Increased jump force for better jumping
-    this.gravity = 0.015;      // Increased gravity to make player land after jumps
+    this.jumpForce = 0.5;      // Increased jump force for better jumping
+    this.gravity = 0.008;      // Reduced gravity for better jump/fly balance
     this.isJumping = false;
     this.isGrounded = false;   // Track if player is on ground
     this.jumpCooldown = 0;     // Allow jumping again only after cooldown
     this.coyoteTime = 0;       // Small window to jump after leaving platform
-    this.terminalVelocity = -0.8; // Maximum falling speed to prevent too fast falling
+    this.terminalVelocity = -0.5; // Maximum falling speed to prevent too fast falling
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.playerMesh = null;
     this.characterData = null;
@@ -4886,14 +4886,25 @@ export default class MultiplayerPlatformer {
       if (this.velocity.y < this.terminalVelocity) {
         this.velocity.y = this.terminalVelocity;
       }
+    } else if (this.isGrounded) {
+      // If on ground and jump key pressed, do an initial jump
+      this.velocity.y = this.jumpForce;
+      this.isGrounded = false;
+      this.isJumping = true;
+      this.jumpCooldown = 10; // Set jump cooldown
+      
+      // Play jump sound
+      this.playSound('jump');
+      
+      // Create jump effect
+      this.createJumpEffect(this.playerMesh.position.clone());
     } else {
-      // When jump key is pressed, apply upward force (flying)
-      this.velocity.y = Math.max(this.velocity.y, 0); // Reset downward velocity
-      this.velocity.y += (this.jumpForce * 0.05 * normalizedDelta); // Apply gradual upward force
+      // When jump key is pressed while in air, apply upward force (flying)
+      this.velocity.y += (this.jumpForce * 0.03 * normalizedDelta); // Apply gradual upward force
       
       // Limit maximum upward velocity
-      if (this.velocity.y > this.jumpForce) {
-        this.velocity.y = this.jumpForce;
+      if (this.velocity.y > this.jumpForce * 0.6) {
+        this.velocity.y = this.jumpForce * 0.6;
       }
     }
     
