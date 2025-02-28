@@ -299,9 +299,64 @@ export default class MultiplayerPlatformer {
       attackBoost: 0      // Timer for attack boost (in frames)
     };
     
-    // Socket.io connection
-    this.socket = io();
-    this.setupSocketEvents();
+    // Initialize socket to avoid undefined errors
+    this.socket = null;
+    
+    // Socket.io connection with deployment support using environment configuration
+    try {
+      // Default socket configuration
+      const defaultSocketOptions = {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000
+      };
+      
+      // Create socket connection with default options immediately
+      this.socket = io(undefined, defaultSocketOptions);
+      
+      // Protocol for WebSockets
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host;
+      console.log(`Connecting to socket server at ${protocol}//${host}`);
+      
+      // Initialize socket events
+      this.setupSocketEvents();
+      
+      // Try to load environment configuration for better settings
+      import('../env.ts').then(env => {
+        const envSocketOptions = env.socketOptions;
+        const wsUrl = env.getWebSocketURL();
+        
+        // Only reconnect with new options if significantly different
+        const shouldReconnect = 
+          JSON.stringify(envSocketOptions) !== JSON.stringify(defaultSocketOptions);
+        
+        if (shouldReconnect && this.socket) {
+          // Disconnect current socket
+          this.socket.disconnect();
+          
+          // Reconnect with environment settings
+          this.socket = io(undefined, envSocketOptions);
+          console.log(`Reconnecting to socket server with environment settings at ${wsUrl}`);
+          
+          // Reinitialize socket events
+          this.setupSocketEvents();
+        }
+      }).catch(err => {
+        console.warn('Using default socket configuration:', err.message);
+      });
+    } catch (error) {
+      console.error('Error initializing socket connection:', error);
+      
+      // Create a dummy socket to prevent errors
+      this.createDummySocket();
+    }
+    
+    // Player map to store other players in the game
+    this.players = new Map();
     
     // Setup renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -435,7 +490,33 @@ export default class MultiplayerPlatformer {
     this.animate();
   }
   
+  // Create a dummy socket object with empty event handlers to prevent errors
+  createDummySocket() {
+    this.socket = {
+      on: (event, callback) => {
+        console.log(`Dummy socket registered event: ${event}`);
+        // No actual event handling happens
+      },
+      emit: (event, data) => {
+        console.log(`Dummy socket emit event: ${event}`, data);
+        // No actual data is sent
+        return true;
+      },
+      disconnect: () => {
+        console.log('Dummy socket disconnected');
+        // No actual disconnection happens
+      }
+    };
+    
+    console.warn('Using dummy socket - multiplayer functionality disabled');
+  }
+  
   setupSocketEvents() {
+    if (!this.socket) {
+      console.error('Socket is not initialized, skipping event setup');
+      return;
+    }
+  
     // Handle player join
     this.socket.on('playerJoin', (data) => {
       console.log(`Player joined: ${data.id}`);

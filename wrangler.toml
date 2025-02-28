@@ -1,0 +1,45 @@
+name = "3d-platformer-game"
+main = "./functions/_middleware.js"
+compatibility_date = "2023-10-02"
+
+[build]
+command = "npm run build"
+output_dir = "dist"
+
+# Route pattern for API requests
+[[routes]]
+pattern = "/api/*"
+script = "./functions/api/[[path]].js"
+
+# Route pattern for WebSocket connections
+[[routes]]
+pattern = "/ws*"
+script = "./functions/_middleware.js"
+
+[[routes]]
+pattern = "/socket.io*"
+script = "./functions/_middleware.js"
+
+# File uploads
+[site]
+bucket = "./dist"
+
+# Environment variables
+[vars]
+NODE_ENV = "production"
+
+# Development environment
+[env.development]
+name = "3d-platformer-game-dev"
+[env.development.vars]
+NODE_ENV = "development"
+
+# Production environment
+[env.production]
+name = "3d-platformer-game"
+[env.production.vars]
+NODE_ENV = "production"
+
+# Optional: Add binding for database if needed
+# [env.production.d1_databases]
+# DB = { binding = "DB" }

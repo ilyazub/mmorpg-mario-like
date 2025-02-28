@@ -161,8 +161,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
   
-  // Set up Socket.io for real-time multiplayer
-  const io = new SocketIOServer(httpServer);
+  // Set up Socket.io for real-time multiplayer with deployment considerations
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: process.env.NODE_ENV === 'production' 
+        ? ['https://*.vercel.app', 'https://*.workers.dev'] // Allow connections from deployment domains
+        : '*', // Allow all origins in development
+      methods: ['GET', 'POST'],
+      credentials: true
+    },
+    transports: ['websocket', 'polling'], // Support both WebSocket and long-polling
+    path: '/socket.io', // Explicit path for socket.io connections
+    pingTimeout: 60000, // Increase timeout for poor connections
+    connectTimeout: 30000 // Longer connect timeout for initial connection
+  });
+  
+  // Log environment information
+  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode`);
   
   io.on("connection", (socket) => {
     console.log(`Player connected: ${socket.id}`);
