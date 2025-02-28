@@ -387,7 +387,7 @@ export default class MultiplayerPlatformer {
     // Player-related properties
     this.playerSpeed = 0.15;
     this.jumpForce = 0.3;     // Increased jump force for better jumping
-    this.gravity = 0.015;     // Increased gravity for more responsive falling
+    this.gravity = 0.008;     // Reduced gravity for smoother flying experience
     this.isJumping = false;
     this.isGrounded = false;  // Track if player is on ground
     this.jumpCooldown = 0;    // Allow jumping again only after cooldown
@@ -4694,33 +4694,42 @@ export default class MultiplayerPlatformer {
       this.jumpCooldown -= normalizedDelta;
     }
     
-    // Apply gravity with deltaTime for consistency
-    this.velocity.y -= this.gravity * normalizedDelta;
+    // Apply reduced gravity to vertical movement (better for flying)
+    if (!this.keys.jump) {
+      // Apply gravity only when not flying upward
+      this.velocity.y -= this.gravity * normalizedDelta;
+    } else {
+      // Apply a slight damping effect when actively flying to avoid excessive acceleration
+      this.velocity.y = Math.min(this.velocity.y, this.jumpForce * 0.6);
+    }
     
     // Coyote time for jump forgiveness - allow jumping shortly after leaving ground
     if (!this.isGrounded && this.coyoteTime > 0) {
       this.coyoteTime -= normalizedDelta;
     }
     
-    // Handle jump input
-    if (this.keys.jump && !this.isJumping && (this.isGrounded || this.coyoteTime > 0) && this.jumpCooldown <= 0) {
-      // Calculate jump force based on character data if available
-      const baseJumpForce = this.jumpForce;
+    // Handle flying with jump key (modified for free flight)
+    if (this.keys.jump) {
+      // Calculate jump/flight force based on character data if available
+      const baseJumpForce = this.jumpForce * 0.5; // Reduced for smoother flying
       const characterBonus = this.characterData ? (this.characterData.jump / 100) : 0;
-      const jumpForce = baseJumpForce * (1 + characterBonus);
+      const flightForce = baseJumpForce * (1 + characterBonus);
       
-      // Apply jump force
-      this.velocity.y = jumpForce;
-      this.isJumping = true;
-      this.isGrounded = false;
-      this.coyoteTime = 0;
-      this.jumpCooldown = 15; // About 0.25 seconds at 60fps
+      // Apply upward force regardless of ground state - enables flying
+      this.velocity.y = flightForce;
       
-      // Play jump sound
-      this.playSound('jump');
+      // Reset jump cooldown to allow continuous flying
+      this.jumpCooldown = 0;
       
-      // Create small jump effect particles
-      this.createJumpEffect(this.playerMesh.position.clone());
+      // Play flight sound occasionally
+      if (Math.random() < 0.05) {
+        this.playSound('jump');
+      }
+      
+      // Create flight effect particles
+      if (Math.random() < 0.1) {
+        this.createFlightEffect(this.playerMesh.position.clone());
+      }
     }
     
     // Update camera rotation based on arrow keys
@@ -5167,6 +5176,93 @@ export default class MultiplayerPlatformer {
     };
     
     animateJumpEffect();
+  }
+  
+  // Method to create flight particles when flying
+  createFlightEffect(position) {
+    const flightParticles = new THREE.Group();
+    
+    // Create more vibrant, colorful particles for flight
+    for (let i = 0; i < 5; i++) {
+      // Random color for each particle
+      const colors = [0x6495ED, 0x00BFFF, 0x87CEFA, 0xADD8E6, 0xB0E0E6];
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      
+      const particle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 8, 8),
+        new THREE.MeshBasicMaterial({ 
+          color: randomColor, 
+          transparent: true, 
+          opacity: 0.7 
+        })
+      );
+      
+      // Position particles around the player in a downward trail
+      const radius = 0.2 + Math.random() * 0.3;
+      const angle = Math.random() * Math.PI * 2;
+      particle.position.set(
+        Math.cos(angle) * radius,
+        -0.3 - Math.random() * 0.4,
+        Math.sin(angle) * radius
+      );
+      
+      // Random velocities for animation - with more downward drift
+      particle.userData.velocity = {
+        x: (Math.random() - 0.5) * 0.02,
+        y: -0.02 - Math.random() * 0.03, // More downward drift
+        z: (Math.random() - 0.5) * 0.02
+      };
+      
+      // Add slight rotation to particles
+      particle.userData.rotation = {
+        x: (Math.random() - 0.5) * 0.05,
+        y: (Math.random() - 0.5) * 0.05,
+        z: (Math.random() - 0.5) * 0.05
+      };
+      
+      flightParticles.add(particle);
+    }
+    
+    // Position at player's feet/behind
+    flightParticles.position.copy(position);
+    this.scene.add(flightParticles);
+    
+    // Animate particles with a longer trail effect
+    const startTime = Date.now();
+    const duration = 500; // ms - longer duration
+    
+    const animateFlightEffect = () => {
+      const elapsedTime = Date.now() - startTime;
+      const progress = elapsedTime / duration;
+      
+      if (progress < 1) {
+        // Update each particle position and rotation
+        flightParticles.children.forEach(particle => {
+          particle.position.x += particle.userData.velocity.x;
+          particle.position.y += particle.userData.velocity.y;
+          particle.position.z += particle.userData.velocity.z;
+          
+          // Apply rotation to particles
+          if (particle.userData.rotation) {
+            particle.rotation.x += particle.userData.rotation.x;
+            particle.rotation.y += particle.userData.rotation.y;
+            particle.rotation.z += particle.userData.rotation.z;
+          }
+          
+          // Fade out gradually
+          if (particle.material) {
+            particle.material.opacity = 0.7 * (1 - progress);
+          }
+        });
+        
+        requestAnimationFrame(animateFlightEffect);
+      } else {
+        // Remove when animation complete
+        this.scene.remove(flightParticles);
+      }
+    };
+    
+    animateFlightEffect();
   }
   
   // Check collision with obstacles (trees, rocks, etc.)

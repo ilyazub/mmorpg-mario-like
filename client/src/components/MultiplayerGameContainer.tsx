@@ -142,9 +142,12 @@ export default function MultiplayerGameContainer() {
           <div className="mb-4">
             <h3 className="text-xl font-bold mb-2 text-center border-b border-white pb-1">Controls</h3>
             <ul className="text-sm space-y-1">
-              <li><span className="font-semibold">Move:</span> Arrow Keys / WASD</li>
-              <li><span className="font-semibold">Jump:</span> Space Bar</li>
-              <li><span className="font-semibold">Attack:</span> F, E, or X Key</li>
+              <li><span className="font-semibold">Move:</span> WASD Keys</li>
+              <li><span className="font-semibold">Fly Higher:</span> Space Bar</li>
+              <li><span className="font-semibold">Rotate Camera:</span> Arrow Keys</li>
+              <li><span className="font-semibold">Attack:</span> F or X Key</li>
+              <li><span className="font-semibold">Quick Rotate:</span> V Key</li>
+              <li><span className="font-semibold">Reset Camera:</span> C Key</li>
             </ul>
           </div>
           
