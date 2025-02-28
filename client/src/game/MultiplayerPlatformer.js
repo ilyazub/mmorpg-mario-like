@@ -2879,6 +2879,11 @@ export default class MultiplayerPlatformer {
   }
   
   selectCharacter(character) {
+    if (!character || !character.name) {
+      console.error('Invalid character data provided to selectCharacter');
+      return;
+    }
+    
     this.characterData = character;
     
     // Create player mesh
@@ -2889,9 +2894,11 @@ export default class MultiplayerPlatformer {
     // Create player mesh with consistent size
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const playerColor = this.getCharacterColor(character.name);
+    // Ensure color is valid to prevent THREE.Material warnings
+    const validColor = (playerColor !== undefined && playerColor !== null) ? playerColor : 0xff0000;
     const material = new THREE.MeshLambertMaterial({ 
-      color: playerColor,
-      emissive: playerColor,
+      color: validColor,
+      emissive: validColor,
       emissiveIntensity: 0.2 // Add subtle glow to make player stand out
     });
     
