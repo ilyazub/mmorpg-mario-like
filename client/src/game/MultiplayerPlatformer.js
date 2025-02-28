@@ -16,6 +16,10 @@ export default class MultiplayerPlatformer {
     this.platforms = []; // Store platforms
     this.groundSegments = []; // Store ground segments
     
+    // Initialize noise parameters for procedural generation
+    this.noiseScale = 0.1;
+    this.noiseSeed = Math.floor(Math.random() * 10000);
+    
     // Inventory system
     this.inventory = {
       items: [],
@@ -1513,7 +1517,7 @@ export default class MultiplayerPlatformer {
     this.generateJumpChallengeArea(jumpX * this.zoneSize, jumpZ * this.zoneSize);
   }
   
-  // Generate a zone of the world at specified grid coordinates
+  // Generate a zone of the world at specified grid coordinates with procedural terrain
   generateWorldZone(gridX, gridZ) {
     const zoneKey = `${gridX},${gridZ}`;
     if (this.exploredZones.has(zoneKey)) return; // Skip if already generated
@@ -1525,40 +1529,122 @@ export default class MultiplayerPlatformer {
     this.exploredZones.add(zoneKey);
     const currentTheme = this.themeProperties[this.currentTheme];
     
-    // Create ground segment for this zone - make it thicker and more visible
-    const groundGeometry = new THREE.BoxGeometry(this.zoneSize, 2, this.zoneSize);
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
+    // Generate terrain heightmap for this zone
+    // We'll create a terrain mesh using a PlaneGeometry with elevation
+    const resolution = 32; // Resolution of the height map (higher = more detailed)
+    const terrainGeometry = new THREE.PlaneGeometry(this.zoneSize, this.zoneSize, resolution, resolution);
+    
+    // Seed based on coordinates for consistent generation across clients
+    const zoneSeed = gridX * 1000 + gridZ;
+    
+    // Determine terrain type based on distance from center and randomness
+    const distanceFromWorldCenter = Math.sqrt(gridX * gridX + gridZ * gridZ);
+    const isMountainous = (distanceFromWorldCenter > 1 && Math.random() > 0.3) || (zoneSeed % 7 === 0);
+    const isHilly = (distanceFromWorldCenter < 2 && Math.random() > 0.4) || (zoneSeed % 5 === 0);
+    const isFlat = !isMountainous && !isHilly;
+    
+    // Parameters for terrain
+    let maxHeight = 0;
+    let heightMultiplier = 0; 
+    let roughness = 0;
+    
+    if (isMountainous) {
+      maxHeight = 12;
+      heightMultiplier = 10;
+      roughness = 0.8;
+    } else if (isHilly) {
+      maxHeight = 4;
+      heightMultiplier = 3;
+      roughness = 0.4;
+    } else {
+      // Flat terrain with slight variations
+      maxHeight = 1;
+      heightMultiplier = 0.5;
+      roughness = 0.2;
+    }
+    
+    // Generate heights using Perlin noise
+    // Apply heights to geometry vertices
+    const positions = terrainGeometry.attributes.position.array;
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      // Convert to x,z coordinates 
+      const x = positions[i];
+      const z = positions[i + 2];
+      
+      // Normalize to 0-1 range for noise input
+      const normalizedX = (x + worldX) / (this.zoneSize * 10);
+      const normalizedZ = (z + worldZ) / (this.zoneSize * 10);
+      
+      // Generate noise value
+      let noiseValue = 0;
+      
+      // Add several octaves of noise
+      // Each octave adds finer detail
+      noiseValue += this.noise(normalizedX * 1, normalizedZ * 1) * 0.5;
+      noiseValue += this.noise(normalizedX * 2, normalizedZ * 2) * 0.25;
+      noiseValue += this.noise(normalizedX * 4, normalizedZ * 4) * 0.125;
+      noiseValue += this.noise(normalizedX * 8, normalizedZ * 8) * 0.0625;
+      
+      // Scale and apply height
+      let height = noiseValue * heightMultiplier;
+      
+      // If it's the central zone, ensure flat center for starting area
+      if (gridX === 0 && gridZ === 0) {
+        const distanceFromZoneCenter = Math.sqrt(x*x + z*z);
+        const normalizedDist = distanceFromZoneCenter / (this.zoneSize/2);
+        if (normalizedDist < 0.5) {
+          // Center area is flat
+          height = 0;
+        } else {
+          // Smooth transition to full height
+          const blendFactor = (normalizedDist - 0.5) * 2;
+          height *= Math.min(1, blendFactor);
+        }
+      }
+      
+      // Ensure height doesn't exceed max
+      height = Math.min(height, maxHeight);
+      
+      // Apply height to vertex
+      positions[i + 1] = height;
+    }
+    
+    // Update geometry after modifying vertices
+    terrainGeometry.attributes.position.needsUpdate = true;
+    terrainGeometry.computeVertexNormals();
+    
+    // Create material based on theme
+    const terrainMaterial = new THREE.MeshStandardMaterial({
       color: currentTheme.groundColor,
-      roughness: 0.8,
-      metalness: 0.2,
-      // Add a subtle wireframe pattern for better visibility
-      wireframe: false,
+      roughness: 0.9,
+      metalness: 0.1,
       flatShading: true
     });
     
-    const groundSegment = new THREE.Mesh(groundGeometry, groundMaterial);
-    // Position ground so its top surface is at y=0
-    // Since the geometry height is 2 and the pivot is in the center, 
-    // setting y=-1 makes the top surface at y=0
-    groundSegment.position.set(worldX, -1, worldZ);
-    groundSegment.receiveShadow = true;
+    // Create the terrain mesh
+    const terrainMesh = new THREE.Mesh(terrainGeometry, terrainMaterial);
+    terrainMesh.rotation.x = -Math.PI / 2; // Rotate to horizontal
+    terrainMesh.position.set(worldX, 0, worldZ);
+    terrainMesh.receiveShadow = true;
+    terrainMesh.castShadow = true;
     
     // Assign segment data for recycling later
-    groundSegment.userData = {
-      segmentType: 'ground',
+    terrainMesh.userData = {
+      segmentType: 'terrain',
       zoneKey: zoneKey,
       gridX: gridX,
       gridZ: gridZ
     };
     
-    this.groundSegments.push(groundSegment);
-    this.scene.add(groundSegment);
+    this.groundSegments.push(terrainMesh);
+    this.scene.add(terrainMesh);
     
     // Add zone-specific features based on grid location
-    const distanceFromCenter = Math.sqrt(gridX * gridX + gridZ * gridZ);
+    const distanceFromOrigin = Math.sqrt(gridX * gridX + gridZ * gridZ);
     
     // Determine zone difficulty and density based on distance from center
-    const zoneDifficulty = Math.min(1.0, distanceFromCenter / 10); // 0 to 1 difficulty scale
+    const zoneDifficulty = Math.min(1.0, distanceFromOrigin / 10); // 0 to 1 difficulty scale
     const shouldAddSpecialFeatures = Math.random() < (0.1 + zoneDifficulty * 0.4); // More special features in harder zones
     
     // More platforms and features in outer zones, with enhanced density
@@ -1631,6 +1717,52 @@ export default class MultiplayerPlatformer {
   }
   
   // Create a hub platform at the center
+  // Simple noise function for terrain generation (Perlin-like)
+  noise(x, y) {
+    // Simple implementation of a Perlin-like noise function
+    // Using a simpler algorithm for performance
+    const X = Math.floor(x);
+    const Y = Math.floor(y);
+    
+    // Get fractional part
+    const xf = x - X;
+    const yf = y - Y;
+    
+    // Create seed-based values for corners
+    const seed = this.noiseSeed;
+    const topRight = this.pseudoRandom(X + 1, Y + 1, seed);
+    const topLeft = this.pseudoRandom(X, Y + 1, seed);
+    const bottomRight = this.pseudoRandom(X + 1, Y, seed);
+    const bottomLeft = this.pseudoRandom(X, Y, seed);
+    
+    // Smooth interpolation
+    const u = this.smoothstep(xf);
+    const v = this.smoothstep(yf);
+    
+    // Bilinear interpolation
+    return this.lerp(
+      this.lerp(bottomLeft, bottomRight, u),
+      this.lerp(topLeft, topRight, u),
+      v
+    );
+  }
+  
+  // Helper functions for noise
+  pseudoRandom(x, y, seed) {
+    // Simple hash function
+    return (Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453) % 1;
+  }
+  
+  smoothstep(t) {
+    // Smooth curve for interpolation
+    return t * t * (3 - 2 * t);
+  }
+  
+  lerp(a, b, t) {
+    // Linear interpolation
+    return a + t * (b - a);
+  }
+  
   generateHubPlatform() {
     const currentTheme = this.themeProperties[this.currentTheme];
     const hubGeometry = new THREE.CylinderGeometry(10, 12, 2, 16);
@@ -4787,6 +4919,7 @@ export default class MultiplayerPlatformer {
       if (intersects.length > 0 && intersects[0].distance < rayLength) {
         // We hit ground within expected distance
         onGround = true;
+        this.isGrounded = true; // Update overall grounded state
         groundHeight = intersects[0].point.y;
         
         // Adjust player position to sit exactly on the ground
@@ -4799,39 +4932,9 @@ export default class MultiplayerPlatformer {
           this.isJumping = false;
           
           // If falling velocity was high, play a landing sound
-          if (this.fallVelocity && this.fallVelocity < -15) {
+          if (this.fallVelocity && this.fallVelocity < -0.3) {
             this.playSound('land');
-            
-            // Small dust effect on landing
-            const dustParticles = new THREE.Group();
-            
-            for (let i = 0; i < 8; i++) {
-              const particle = new THREE.Mesh(
-                new THREE.SphereGeometry(0.1, 8, 8),
-                new THREE.MeshBasicMaterial({ 
-                  color: 0xdddddd, 
-                  transparent: true, 
-                  opacity: 0.7 
-                })
-              );
-              
-              particle.position.set(
-                (Math.random() - 0.5) * 0.8,
-                0.05,
-                (Math.random() - 0.5) * 0.8
-              );
-              
-              dustParticles.add(particle);
-            }
-            
-            dustParticles.position.copy(this.playerMesh.position);
-            dustParticles.position.y = groundHeight + 0.05; // Just above ground
-            this.scene.add(dustParticles);
-            
-            // Fade out and remove
-            setTimeout(() => {
-              this.scene.remove(dustParticles);
-            }, 300);
+            this.createLandingEffect(this.playerMesh.position.clone(), groundHeight);
           }
         }
         
@@ -4892,6 +4995,7 @@ export default class MultiplayerPlatformer {
               this.playerMesh.position.y = platformBox.max.y + playerHeight / 2;
               this.velocity.y = 0;
               this.isJumping = false;
+              this.isGrounded = true;
             } else {
               // Player hit ceiling - stop upward movement
               this.playerMesh.position.y = platformBox.min.y - playerHeight / 2;
@@ -4911,6 +5015,386 @@ export default class MultiplayerPlatformer {
     if (!onGround && this.velocity.y <= 0) {
       this.isJumping = true;
     }
+  }
+  
+  // Method to create landing effect particles
+  createLandingEffect(position, groundY = 0) {
+    const dustParticles = new THREE.Group();
+    
+    for (let i = 0; i < 12; i++) {
+      const particle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 8, 8),
+        new THREE.MeshBasicMaterial({ 
+          color: 0xdddddd, 
+          transparent: true, 
+          opacity: 0.7 
+        })
+      );
+      
+      // Random position in a circle around the landing point
+      const radius = 0.3 + Math.random() * 0.5;
+      const angle = Math.random() * Math.PI * 2;
+      particle.position.set(
+        Math.cos(angle) * radius,
+        0.05 + Math.random() * 0.1,
+        Math.sin(angle) * radius
+      );
+      
+      // Random velocities for animation
+      particle.userData.velocity = {
+        x: (Math.random() - 0.5) * 0.05,
+        y: 0.01 + Math.random() * 0.02,
+        z: (Math.random() - 0.5) * 0.05
+      };
+      
+      dustParticles.add(particle);
+    }
+    
+    // Position at player's feet
+    dustParticles.position.copy(position);
+    dustParticles.position.y = groundY + 0.05;
+    this.scene.add(dustParticles);
+    
+    // Animate particles
+    const startTime = Date.now();
+    const duration = 500; // ms
+    
+    const animateDust = () => {
+      const elapsedTime = Date.now() - startTime;
+      const progress = elapsedTime / duration;
+      
+      if (progress < 1) {
+        // Update each particle position
+        dustParticles.children.forEach(particle => {
+          particle.position.x += particle.userData.velocity.x;
+          particle.position.y += particle.userData.velocity.y;
+          particle.position.z += particle.userData.velocity.z;
+          
+          // Slow down vertical velocity (gravity)
+          particle.userData.velocity.y -= 0.001;
+          
+          // Fade out
+          if (particle.material) {
+            particle.material.opacity = 0.7 * (1 - progress);
+          }
+        });
+        
+        requestAnimationFrame(animateDust);
+      } else {
+        // Remove when animation complete
+        this.scene.remove(dustParticles);
+      }
+    };
+    
+    animateDust();
+  }
+  
+  // Method to create jump effect particles
+  createJumpEffect(position) {
+    const jumpParticles = new THREE.Group();
+    
+    for (let i = 0; i < 8; i++) {
+      const particle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.04 + Math.random() * 0.08, 8, 8),
+        new THREE.MeshBasicMaterial({ 
+          color: 0xcceeff, 
+          transparent: true, 
+          opacity: 0.6 
+        })
+      );
+      
+      // Random position in a circle around jump point
+      const radius = 0.2 + Math.random() * 0.3;
+      const angle = Math.random() * Math.PI * 2;
+      particle.position.set(
+        Math.cos(angle) * radius,
+        -0.2 + Math.random() * 0.1,
+        Math.sin(angle) * radius
+      );
+      
+      // Random velocities for animation
+      particle.userData.velocity = {
+        x: (Math.random() - 0.5) * 0.03,
+        y: -0.01 - Math.random() * 0.02,
+        z: (Math.random() - 0.5) * 0.03
+      };
+      
+      jumpParticles.add(particle);
+    }
+    
+    // Position at player's feet
+    jumpParticles.position.copy(position);
+    jumpParticles.position.y -= 0.4; // Below player center
+    this.scene.add(jumpParticles);
+    
+    // Animate particles
+    const startTime = Date.now();
+    const duration = 300; // ms
+    
+    const animateJumpEffect = () => {
+      const elapsedTime = Date.now() - startTime;
+      const progress = elapsedTime / duration;
+      
+      if (progress < 1) {
+        // Update each particle position
+        jumpParticles.children.forEach(particle => {
+          particle.position.x += particle.userData.velocity.x;
+          particle.position.y += particle.userData.velocity.y;
+          particle.position.z += particle.userData.velocity.z;
+          
+          // Fade out
+          if (particle.material) {
+            particle.material.opacity = 0.6 * (1 - progress);
+          }
+        });
+        
+        requestAnimationFrame(animateJumpEffect);
+      } else {
+        // Remove when animation complete
+        this.scene.remove(jumpParticles);
+      }
+    };
+    
+    animateJumpEffect();
+  }
+  
+  // Check collision with obstacles (trees, rocks, etc.)
+  checkObstacleCollisions() {
+    if (!this.playerMesh) return;
+    
+    // Use sphere-based collision for obstacles
+    const playerPosition = this.playerMesh.position.clone();
+    const collisionRadius = this.collisionRadius;
+    
+    // Process decorations (trees, rocks, etc.)
+    for (const decoration of this.decorations) {
+      if (!decoration.userData || decoration.userData.noCollision) continue;
+      
+      // Calculate distance between centers
+      const distance = playerPosition.distanceTo(decoration.position);
+      
+      // Get decoration radius (or use default if not defined)
+      const decorationRadius = decoration.userData.collisionRadius || 0.5;
+      
+      // Check if collision occurred
+      if (distance < (collisionRadius + decorationRadius)) {
+        // Calculate push direction (away from obstacle)
+        const pushDirection = new THREE.Vector3()
+          .subVectors(playerPosition, decoration.position)
+          .normalize();
+        
+        // Move player out of collision
+        this.playerMesh.position.add(
+          pushDirection.multiplyScalar(collisionRadius + decorationRadius - distance + 0.05)
+        );
+        
+        // Stop velocity in that direction
+        const dot = this.velocity.dot(pushDirection);
+        if (dot < 0) {
+          this.velocity.sub(pushDirection.multiplyScalar(dot));
+        }
+        
+        // Trigger decoration wiggle effect
+        this.triggerDecorationWiggle(decoration);
+        
+        // Notify server about collision for multiplayer sync
+        if (decoration.userData.id && this.socket) {
+          this.socket.emit('decorationCollision', {
+            decorationId: decoration.userData.id,
+            position: decoration.position,
+            type: decoration.userData.type || 'tree'
+          });
+        }
+      }
+    }
+    
+    // Check obstacles (similar to decorations but potentially with different behavior)
+    for (const obstacle of this.obstacles) {
+      if (!obstacle.visible || obstacle.userData.noCollision) continue;
+      
+      // Calculate distance between centers
+      const distance = playerPosition.distanceTo(obstacle.position);
+      
+      // Get obstacle radius
+      const obstacleRadius = obstacle.userData.collisionRadius || 0.6;
+      
+      // Check if collision occurred
+      if (distance < (collisionRadius + obstacleRadius)) {
+        // Handle obstacle specific behavior
+        if (obstacle.userData.jumpPad) {
+          // It's a jump pad - apply boost
+          this.velocity.y = this.jumpForce * 1.5;
+          this.isJumping = true;
+          this.playSound('jumpPad');
+          
+          // Create jump pad effect
+          this.createJumpPadEffect(obstacle.position.clone());
+        } else if (obstacle.userData.speedBoost) {
+          // Speed boost powerup
+          this.applyPowerUpEffect('speedBoost');
+          
+          // Hide the powerup
+          obstacle.visible = false;
+          obstacle.userData.collected = true;
+        } else {
+          // Standard obstacle - push player away
+          const pushDirection = new THREE.Vector3()
+            .subVectors(playerPosition, obstacle.position)
+            .normalize();
+          
+          // Move player out of collision
+          this.playerMesh.position.add(
+            pushDirection.multiplyScalar(collisionRadius + obstacleRadius - distance + 0.05)
+          );
+          
+          // Reduce velocity in collision direction
+          const dot = this.velocity.dot(pushDirection);
+          if (dot < 0) {
+            this.velocity.sub(pushDirection.multiplyScalar(dot));
+          }
+        }
+      }
+    }
+  }
+  
+  // Check collisions with other players
+  checkOtherPlayerCollisions() {
+    if (!this.playerMesh) return;
+    
+    const playerPosition = this.playerMesh.position.clone();
+    const collisionRadius = this.collisionRadius;
+    
+    // Iterate through other players
+    this.players.forEach((otherPlayer, playerId) => {
+      if (!otherPlayer.mesh || !otherPlayer.mesh.visible) return;
+      
+      // Get other player position
+      const otherPosition = otherPlayer.mesh.position.clone();
+      
+      // Calculate distance between players
+      const distance = playerPosition.distanceTo(otherPosition);
+      
+      // Check for collision (allow slight overlap)
+      if (distance < collisionRadius * 1.8) {
+        // Calculate push direction
+        const pushDirection = new THREE.Vector3()
+          .subVectors(playerPosition, otherPosition)
+          .normalize();
+        
+        // Softer collision response for player-player interaction
+        this.playerMesh.position.add(
+          pushDirection.multiplyScalar(0.05)
+        );
+        
+        // Reduce velocity slightly in collision direction
+        const dot = this.velocity.dot(pushDirection);
+        if (dot < 0) {
+          this.velocity.sub(pushDirection.multiplyScalar(dot * 0.5)); // Softer reaction
+        }
+      }
+    });
+  }
+  
+  // Check world boundaries to prevent falling off
+  checkWorldBoundaries() {
+    if (!this.playerMesh) return;
+    
+    // Get current world dimensions
+    const worldWidth = 100; // Adjust based on your world size
+    const worldLimit = 50;  // Boundary limit
+    
+    // Check if player is too far outside world bounds
+    if (Math.abs(this.playerMesh.position.x) > worldWidth) {
+      // Push player back toward center
+      const direction = this.playerMesh.position.x > 0 ? -1 : 1;
+      this.playerMesh.position.x = worldWidth * Math.sign(this.playerMesh.position.x);
+      this.velocity.x = 0;
+    }
+    
+    // Check if player fell off the world
+    if (this.playerMesh.position.y < -10) {
+      // Respawn player
+      this.playerMesh.position.set(0, 5, 0);
+      this.velocity.set(0, 0, 0);
+      this.lives--;
+      
+      if (this.lives <= 0) {
+        this.gameOver();
+      } else {
+        this.showPlayerDamageEffect();
+        this.playSound('playerHurt');
+      }
+    }
+  }
+  
+  // Create effect for jump pads
+  createJumpPadEffect(position) {
+    const particles = new THREE.Group();
+    
+    // Create particle effect
+    for (let i = 0; i < 15; i++) {
+      const particle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 8, 8),
+        new THREE.MeshBasicMaterial({ 
+          color: 0x00ffff, 
+          transparent: true, 
+          opacity: 0.8 
+        })
+      );
+      
+      // Random position in circle
+      const radius = 0.1 + Math.random() * 0.3;
+      const angle = Math.random() * Math.PI * 2;
+      particle.position.set(
+        Math.cos(angle) * radius,
+        Math.random() * 0.2,
+        Math.sin(angle) * radius
+      );
+      
+      // Random velocities for animation
+      particle.userData.velocity = {
+        x: (Math.random() - 0.5) * 0.05,
+        y: 0.05 + Math.random() * 0.1,
+        z: (Math.random() - 0.5) * 0.05
+      };
+      
+      particles.add(particle);
+    }
+    
+    // Position particles at jump pad
+    particles.position.copy(position);
+    particles.position.y += 0.5; // Slightly above jump pad
+    this.scene.add(particles);
+    
+    // Animate particles
+    const startTime = Date.now();
+    const duration = 700; // ms
+    
+    const animateJumpPadEffect = () => {
+      const elapsedTime = Date.now() - startTime;
+      const progress = elapsedTime / duration;
+      
+      if (progress < 1) {
+        // Update each particle position
+        particles.children.forEach(particle => {
+          particle.position.x += particle.userData.velocity.x;
+          particle.position.y += particle.userData.velocity.y;
+          particle.position.z += particle.userData.velocity.z;
+          
+          // Fade out
+          if (particle.material) {
+            particle.material.opacity = 0.8 * (1 - progress);
+          }
+        });
+        
+        requestAnimationFrame(animateJumpPadEffect);
+      } else {
+        // Remove when animation complete
+        this.scene.remove(particles);
+      }
+    };
+    
+    animateJumpPadEffect();
   }
   
   checkCoinCollisions() {
