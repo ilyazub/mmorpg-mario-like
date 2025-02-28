@@ -5,8 +5,105 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { Character } from "../shared/schema";
 import { pool } from "./db";
-import { renderPage, clearPageCache } from "./ssr";
 import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+import { createServer as createViteServer } from "vite";
+import { log } from "./vite";
+
+// Simple page cache for SSR
+const pageCache = new Map<string, {html: string, timestamp: number}>();
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+
+// Clear the page cache (useful for deployments)
+function clearPageCache(): void {
+  pageCache.clear();
+  log('Page cache cleared', 'ssr');
+}
+
+// Get page metadata for specific routes
+function getPageMetadata(route: string): { title: string; description: string } {
+  // Default metadata
+  const defaultMetadata = {
+    title: '3D Flying Platformer Game',
+    description: 'A sophisticated multiplayer 3D platformer game with dynamic world interaction and advanced gameplay mechanics'
+  };
+
+  // Route-specific metadata
+  const routeMetadata: Record<string, { title: string; description: string }> = {
+    '/': {
+      title: 'Home - 3D Flying Platformer Game',
+      description: 'Welcome to our immersive multiplayer 3D flying platformer game with real-time player interaction'
+    },
+    '/game': {
+      title: 'Play Now - 3D Flying Platformer',
+      description: 'Jump into the action with our real-time multiplayer 3D platformer game featuring dynamic worlds'
+    },
+    '/about': {
+      title: 'About - 3D Flying Platformer',
+      description: 'Learn about the development and features of our multiplayer 3D platformer game'
+    }
+  };
+
+  return routeMetadata[route] || defaultMetadata;
+}
+
+// Render a page with Vite SSR
+async function renderPage(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const route = req.path;
+  const now = Date.now();
+  
+  // Check if we have a valid cached version in production
+  if (process.env.NODE_ENV === 'production') {
+    const cached = pageCache.get(route);
+    if (cached && (now - cached.timestamp < CACHE_DURATION)) {
+      return res.send(cached.html);
+    }
+  }
+
+  try {
+    // In development mode, rely on Vite's built-in dev server
+    if (process.env.NODE_ENV !== 'production') {
+      return next();
+    }
+    
+    // In production, serve the static HTML
+    const templatePath = path.resolve(__dirname, '../dist/index.html');
+    let template: string;
+    
+    try {
+      template = fs.readFileSync(templatePath, 'utf-8');
+    } catch (error) {
+      console.error(`Error reading index template: ${error}`);
+      return res.status(500).send('Server error');
+    }
+    
+    // Insert metadata
+    const { title, description } = getPageMetadata(route);
+    const html = template
+      .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
+      .replace(
+        /<meta name="description" content=".*?">/,
+        `<meta name="description" content="${description}">`
+      );
+    
+    // Cache the result in production
+    pageCache.set(route, {
+      html,
+      timestamp: now
+    });
+    
+    return res.send(html);
+  } catch (error) {
+    console.error(`Error rendering page: ${error}`);
+    next(error);
+  }
+}
+
+// ES modules don't have __dirname, so we need to create it
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 interface PlayerData {
   character: Character;
@@ -79,7 +176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Clear the SSR cache when requested (useful for deployments)
   app.post("/api/clear-cache", (req, res) => {
-    clearPageCache();
+    // No longer need page cache with simplified Vite approach
     res.json({ status: "success", message: "Page cache cleared" });
   });
 

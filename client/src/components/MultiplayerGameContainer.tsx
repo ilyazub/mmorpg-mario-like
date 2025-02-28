@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { toast } from "@/hooks/use-toast";
-// @ts-ignore - Using JS module without type definitions
-import MultiplayerPlatformer from '../game/MultiplayerPlatformer';
 import { Character } from '../game/engine';
 import { getWebSocketURL } from '../env';
+// Import Three.js directly here to make sure it's loaded before our game
+import * as THREE from 'three';
 
 export default function MultiplayerGameContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -25,26 +25,46 @@ export default function MultiplayerGameContainer() {
     if (containerRef.current && !gameRef.current) {
       console.log('Initializing game and attaching event listeners');
       
-      try {
-        // Initialize game on component mount with WebSocket URL
-        const wsUrl = getWebSocketURL();
-        console.log(`Initializing game with WebSocket URL: ${wsUrl}`);
-        
-        gameRef.current = new MultiplayerPlatformer(containerRef.current, wsUrl);
-        
-        // Notify user that game is ready
+      // Dynamically import the MultiplayerPlatformer to avoid MIME type issues
+      import('../game/MultiplayerPlatformer').then(module => {
+        try {
+          // Initialize game on component mount with WebSocket URL
+          const wsUrl = getWebSocketURL();
+          console.log(`Initializing game with WebSocket URL: ${wsUrl}`);
+          
+          // Extract the default export of the dynamically imported module
+          const MultiplayerPlatformerClass = module.default;
+          console.log('MultiplayerPlatformer loaded:', MultiplayerPlatformerClass);
+          
+          // Create an instance of the game class with the container and WebSocket URL
+          if (containerRef.current) {
+            // Use type assertion to treat containerRef.current as HTMLElement
+            gameRef.current = new MultiplayerPlatformerClass(containerRef.current as HTMLElement, wsUrl);
+          } else {
+            throw new Error("Container element is not available");
+          }
+          
+          // Notify user that game is ready
+          toast({
+            title: "Game Initialized",
+            description: "Multiplayer features are ready. Select a character to begin!",
+          });
+        } catch (error) {
+          console.error('Error initializing game:', error);
+          toast({
+            title: "Game Initialization Failed",
+            description: "There was a problem starting the game. Please try refreshing the page.",
+            variant: "destructive",
+          });
+        }
+      }).catch(error => {
+        console.error('Failed to load MultiplayerPlatformer module:', error);
         toast({
-          title: "Game Initialized",
-          description: "Multiplayer features are ready. Select a character to begin!",
-        });
-      } catch (error) {
-        console.error('Error initializing game:', error);
-        toast({
-          title: "Game Initialization Failed",
-          description: "There was a problem starting the game. Please try refreshing the page.",
+          title: "Module Loading Failed",
+          description: "Failed to load game module. Please try refreshing the page.",
           variant: "destructive",
         });
-      }
+      });
       
       // Manually attach key event handlers to make sure they're connected
       const handleKeyDown = (event: KeyboardEvent) => {
