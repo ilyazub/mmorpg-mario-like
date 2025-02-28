@@ -126,8 +126,8 @@ export default class MultiplayerPlatformer {
     this.minimapDisplay = document.createElement('div');
     this.minimapDisplay.className = 'minimap-display';
     this.minimapDisplay.style.position = 'absolute';
-    this.minimapDisplay.style.top = '20px';
-    this.minimapDisplay.style.right = '20px';
+    this.minimapDisplay.style.top = '10px';
+    this.minimapDisplay.style.right = '10px';
     this.minimapDisplay.style.width = '150px';
     this.minimapDisplay.style.height = '150px';
     this.minimapDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
@@ -186,8 +186,8 @@ export default class MultiplayerPlatformer {
     this.cameraControls = document.createElement('div');
     this.cameraControls.className = 'camera-controls';
     this.cameraControls.style.position = 'absolute';
-    this.cameraControls.style.bottom = '170px';
-    this.cameraControls.style.right = '20px';
+    this.cameraControls.style.bottom = '70px';
+    this.cameraControls.style.right = '10px';
     this.cameraControls.style.display = 'grid';
     this.cameraControls.style.gridTemplateColumns = 'repeat(3, 1fr)';
     this.cameraControls.style.gridTemplateRows = 'repeat(3, 1fr)';
@@ -238,7 +238,7 @@ export default class MultiplayerPlatformer {
     this.cameraIndicator = document.createElement('div');
     this.cameraIndicator.className = 'camera-indicator';
     this.cameraIndicator.style.position = 'absolute';
-    this.cameraIndicator.style.top = '70px';
+    this.cameraIndicator.style.bottom = '20px';
     this.cameraIndicator.style.right = '20px';
     this.cameraIndicator.style.width = '40px';
     this.cameraIndicator.style.height = '40px';
