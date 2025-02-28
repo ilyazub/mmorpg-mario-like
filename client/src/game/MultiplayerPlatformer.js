@@ -382,14 +382,19 @@ export default class MultiplayerPlatformer {
     
     // Player-related properties
     this.playerSpeed = 0.15;
-    this.jumpForce = 0.2;
-    this.gravity = 0.01;
+    this.jumpForce = 0.3;     // Increased jump force for better jumping
+    this.gravity = 0.015;     // Increased gravity for more responsive falling
     this.isJumping = false;
+    this.isGrounded = false;  // Track if player is on ground
+    this.jumpCooldown = 0;    // Allow jumping again only after cooldown
+    this.coyoteTime = 0;      // Small window to jump after leaving platform
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.playerMesh = null;
     this.characterData = null;
     this.isAttacking = false;
     this.attackCooldown = 0;
+    this.collisionRadius = 0.5; // Player collision radius
+    this.playerHeight = 1.0;    // Player height for collision
     
     // Procedural world generation parameters
     this.worldSections = [];
@@ -4545,37 +4550,79 @@ export default class MultiplayerPlatformer {
   updatePlayerPosition(deltaTime) {
     if (!this.isRunning || !this.playerMesh) return;
     
-    // Apply gravity
-    this.velocity.y -= this.gravity;
+    // Normalize deltaTime for frame rate independence
+    const normalizedDelta = deltaTime / 16.67; // Normalized to 60 FPS
+    
+    // Update jump cooldown if active
+    if (this.jumpCooldown > 0) {
+      this.jumpCooldown -= normalizedDelta;
+    }
+    
+    // Apply gravity with deltaTime for consistency
+    this.velocity.y -= this.gravity * normalizedDelta;
+    
+    // Coyote time for jump forgiveness - allow jumping shortly after leaving ground
+    if (!this.isGrounded && this.coyoteTime > 0) {
+      this.coyoteTime -= normalizedDelta;
+    }
+    
+    // Handle jump input
+    if (this.keys.jump && !this.isJumping && (this.isGrounded || this.coyoteTime > 0) && this.jumpCooldown <= 0) {
+      // Calculate jump force based on character data if available
+      const baseJumpForce = this.jumpForce;
+      const characterBonus = this.characterData ? (this.characterData.jump / 100) : 0;
+      const jumpForce = baseJumpForce * (1 + characterBonus);
+      
+      // Apply jump force
+      this.velocity.y = jumpForce;
+      this.isJumping = true;
+      this.isGrounded = false;
+      this.coyoteTime = 0;
+      this.jumpCooldown = 15; // About 0.25 seconds at 60fps
+      
+      // Play jump sound
+      this.playSound('jump');
+      
+      // Create small jump effect particles
+      this.createJumpEffect(this.playerMesh.position.clone());
+    }
     
     // Update camera rotation based on arrow keys
     if (this.keys.rotateLeft) {
-      this.cameraAngleHorizontal += this.cameraRotationSpeed;
+      this.cameraAngleHorizontal += this.cameraRotationSpeed * normalizedDelta;
     }
     if (this.keys.rotateRight) {
-      this.cameraAngleHorizontal -= this.cameraRotationSpeed;
+      this.cameraAngleHorizontal -= this.cameraRotationSpeed * normalizedDelta;
     }
     if (this.keys.rotateUp) {
-      this.cameraAngleVertical = Math.max(0.1, this.cameraAngleVertical - this.cameraRotationSpeed * 0.5);
+      this.cameraAngleVertical = Math.max(0.1, this.cameraAngleVertical - this.cameraRotationSpeed * 0.5 * normalizedDelta);
     }
     if (this.keys.rotateDown) {
-      this.cameraAngleVertical = Math.min(1.0, this.cameraAngleVertical + this.cameraRotationSpeed * 0.5);
+      this.cameraAngleVertical = Math.min(1.0, this.cameraAngleVertical + this.cameraRotationSpeed * 0.5 * normalizedDelta);
     }
     
     // Calculate movement direction relative to camera angle
     let moveX = 0;
     let moveZ = 0;
     
+    // Get character speed bonus if available
+    const baseSpeed = this.playerSpeed;
+    const characterBonus = this.characterData ? (this.characterData.speed / 100) : 0;
+    const effectiveSpeed = baseSpeed * (1 + characterBonus) * normalizedDelta;
+    
+    // Handle active speed boost
+    const speedMultiplier = this.activeEffects.speedBoost > 0 ? 1.5 : 1;
+    
     if (this.keys.forward) {
-      moveZ = -this.playerSpeed;
+      moveZ = -effectiveSpeed * speedMultiplier;
     } else if (this.keys.backward) {
-      moveZ = this.playerSpeed;
+      moveZ = effectiveSpeed * speedMultiplier;
     }
     
     if (this.keys.left) {
-      moveX = -this.playerSpeed;
+      moveX = -effectiveSpeed * speedMultiplier;
     } else if (this.keys.right) {
-      moveX = this.playerSpeed;
+      moveX = effectiveSpeed * speedMultiplier;
     }
     
     // Apply camera rotation to movement direction
@@ -4586,15 +4633,33 @@ export default class MultiplayerPlatformer {
       
       this.velocity.x = rotatedX;
       this.velocity.z = rotatedZ;
+      
+      // Rotate player model to face movement direction
+      if (this.playerMesh) {
+        const angle = Math.atan2(this.velocity.x, this.velocity.z);
+        this.playerMesh.rotation.y = angle;
+      }
     } else {
-      this.velocity.x = 0;
-      this.velocity.z = 0;
+      // Gradually slow down horizontal movement (friction)
+      this.velocity.x *= 0.8;
+      this.velocity.z *= 0.8;
+      
+      // Stop completely if very slow
+      if (Math.abs(this.velocity.x) < 0.01) this.velocity.x = 0;
+      if (Math.abs(this.velocity.z) < 0.01) this.velocity.z = 0;
     }
     
-    // Update player position
+    // Store original position for collision reversion
+    const originalPosition = this.playerMesh.position.clone();
+    
+    // Update player position with velocity
     this.playerMesh.position.x += this.velocity.x;
     this.playerMesh.position.y += this.velocity.y;
     this.playerMesh.position.z += this.velocity.z;
+    
+    // Track if player was on ground before position update
+    const wasGrounded = this.isGrounded;
+    this.isGrounded = false;
     
     // Check ground collision - make sure player stays above ground
     const MIN_HEIGHT = 0.5; // Player height is 1, so center is 0.5 units above ground
@@ -4603,21 +4668,38 @@ export default class MultiplayerPlatformer {
       this.playerMesh.position.y = MIN_HEIGHT;
       // Reset vertical velocity
       this.velocity.y = 0;
-      // Allow jumping again since we're on solid ground
+      
+      // Track ground state
+      this.isGrounded = true;
       this.isJumping = false;
       
-      // If player is moving very fast downward, add a small bounce effect
-      if (this.velocity.y < -0.5) {
-        // Play landing sound effect
-        this.playSound('land');
+      // Start coyote time if player wasn't grounded before
+      if (!wasGrounded) {
+        // If player is moving very fast downward, add landing effects
+        if (this.velocity.y < -0.3) {
+          // Play landing sound effect
+          this.playSound('land');
+          
+          // Create landing dust effect
+          this.createLandingEffect(this.playerMesh.position.clone());
+        }
       }
     }
     
-    // Check platform collisions
-    this.checkPlatformCollisions();
+    // Set coyote time if we've just left the ground
+    if (wasGrounded && !this.isGrounded) {
+      this.coyoteTime = 8; // About 0.13 seconds at 60fps
+    }
     
-    // Check coin collisions
-    this.checkCoinCollisions();
+    // Reset jumping state if downward movement
+    if (this.velocity.y < 0) {
+      this.isJumping = false;
+    }
+    
+    // Check collisions with terrain and other objects
+    this.checkPlatformCollisions();
+    this.checkObstacleCollisions(); // Added obstacle checking
+    this.checkOtherPlayerCollisions(); // Added player-player collisions
     
     // Update camera position based on orbit parameters
     const playerPos = this.playerMesh.position;
@@ -4634,8 +4716,20 @@ export default class MultiplayerPlatformer {
     // Make camera look at player
     this.camera.lookAt(playerPos);
     
-    // Send position update to server
-    if (this.characterData) {
+    // Check world boundaries to prevent falling off
+    this.checkWorldBoundaries();
+    
+    // Check coin and collectible collisions
+    this.checkCoinCollisions();
+    
+    // Send position update to server if position changed significantly
+    if (this.characterData && 
+        (Math.abs(this.lastReportedPosition?.x - this.playerMesh.position.x) > 0.1 ||
+         Math.abs(this.lastReportedPosition?.y - this.playerMesh.position.y) > 0.1 ||
+         Math.abs(this.lastReportedPosition?.z - this.playerMesh.position.z) > 0.1)) {
+      
+      this.lastReportedPosition = this.playerMesh.position.clone();
+      
       this.socket.emit('updatePosition', {
         character: this.characterData,
         position: {
