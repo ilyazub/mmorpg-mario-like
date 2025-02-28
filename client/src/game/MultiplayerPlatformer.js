@@ -517,10 +517,38 @@ export default class MultiplayerPlatformer {
         // Event handlers and callback storage
         const eventHandlers = new Map();
         
+        // Reconnection settings
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const reconnectDelay = 2000; // Start with 2 second delay
+        let reconnectTimer = null;
+        
+        // Function to handle reconnection logic
+        const attemptReconnect = () => {
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            const currentDelay = reconnectDelay * Math.pow(1.5, reconnectAttempts - 1); // Exponential backoff
+            console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts}) in ${currentDelay}ms...`);
+            
+            reconnectTimer = setTimeout(() => {
+              console.log(`Reconnecting to WebSocket server at ${this.wsUrl}`);
+              // Create a new WebSocket instance
+              this.createDummySocket();
+            }, currentDelay);
+          } else {
+            console.error('Maximum reconnection attempts reached. WebSocket connection lost permanently.');
+            // Allow manual reconnection by user action
+            if (eventHandlers.has('reconnectFailed')) {
+              eventHandlers.get('reconnectFailed').forEach(callback => callback());
+            }
+          }
+        };
+        
         // Set up WebSocket event listeners
         ws.onopen = () => {
-          console.log('WebSocket connected');
+          console.log('WebSocket connected successfully');
           this.socketConnected = true;
+          reconnectAttempts = 0; // Reset reconnect attempts on successful connection
           
           // Call any registered 'connect' handlers
           if (eventHandlers.has('connect')) {
@@ -548,13 +576,19 @@ export default class MultiplayerPlatformer {
           }
         };
         
-        ws.onclose = () => {
-          console.log('WebSocket disconnected');
+        ws.onclose = (event) => {
+          console.log(`WebSocket disconnected with code: ${event.code}, reason: ${event.reason || 'No reason provided'}`);
           this.socketConnected = false;
           
           // Call any registered 'disconnect' handlers
           if (eventHandlers.has('disconnect')) {
             eventHandlers.get('disconnect').forEach(callback => callback());
+          }
+          
+          // Attempt to reconnect for non-intentional disconnects
+          // Code 1000 (Normal Closure) or 1001 (Going Away) are intentional
+          if (event.code !== 1000 && event.code !== 1001) {
+            attemptReconnect();
           }
         };
         
@@ -575,22 +609,57 @@ export default class MultiplayerPlatformer {
               eventHandlers.set(event, []);
             }
             eventHandlers.get(event).push(callback);
+            return this.socket; // For method chaining
           },
           
-          // Send event
-          emit: (event, data) => {
+          // Remove event listener
+          off: (event, callback) => {
+            if (eventHandlers.has(event) && callback) {
+              const handlers = eventHandlers.get(event);
+              const index = handlers.indexOf(callback);
+              if (index !== -1) {
+                handlers.splice(index, 1);
+              }
+            }
+            return this.socket; // For method chaining
+          },
+          
+          // Send event with retry capability
+          emit: (event, data, retries = 2) => {
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: event, ...data }));
-              return true;
+              try {
+                ws.send(JSON.stringify({ type: event, ...data }));
+                return true;
+              } catch (err) {
+                console.error(`Error sending message ${event}:`, err);
+                
+                if (retries > 0) {
+                  console.log(`Retrying send ${event}, ${retries} attempts left`);
+                  setTimeout(() => {
+                    this.socket.emit(event, data, retries - 1);
+                  }, 500);
+                }
+              }
             }
             return false;
           },
           
-          // Disconnect
+          // Disconnect manually
           disconnect: () => {
-            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-              ws.close();
+            // Clear any reconnection timers
+            if (reconnectTimer) {
+              clearTimeout(reconnectTimer);
+              reconnectTimer = null;
             }
+            
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+              ws.close(1000, "Intentional disconnect"); // Use code 1000 for clean disconnection
+            }
+          },
+          
+          // Connection status
+          get connected() {
+            return ws.readyState === WebSocket.OPEN;
           },
           
           // Native WebSocket access
