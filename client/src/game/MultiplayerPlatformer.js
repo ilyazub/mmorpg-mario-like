@@ -4432,44 +4432,131 @@ export default class MultiplayerPlatformer {
     // Store original position to revert if collision occurs
     const originalPosition = this.playerMesh.position.clone();
     
-    // Check platform collisions
+    // Create a raycaster for ground detection
+    const raycaster = new THREE.Raycaster();
+    const rayOrigin = this.playerMesh.position.clone();
+    rayOrigin.y += 0.1; // Slightly above player position to avoid self-intersection
+    const rayDirection = new THREE.Vector3(0, -1, 0); // Downward ray
+    const rayLength = playerHeight/2 + 0.2; // Half player height plus a small margin
+    
+    raycaster.set(rayOrigin, rayDirection);
+    
+    // Track whether player is on ground
+    let onGround = false;
+    let groundHeight = 0;
+    
+    // Check ground detection with raycasting first
+    for (const platform of this.platforms) {
+      const intersects = raycaster.intersectObject(platform);
+      
+      if (intersects.length > 0 && intersects[0].distance < rayLength) {
+        // We hit ground within expected distance
+        onGround = true;
+        groundHeight = intersects[0].point.y;
+        
+        // Adjust player position to sit exactly on the ground
+        // Add half player height because pivot is at center
+        this.playerMesh.position.y = groundHeight + playerHeight/2;
+        
+        // Reset vertical velocity when landing
+        if (this.velocity.y < 0) {
+          this.velocity.y = 0;
+          this.isJumping = false;
+          
+          // If falling velocity was high, play a landing sound
+          if (this.fallVelocity && this.fallVelocity < -15) {
+            this.playSound('land');
+            
+            // Small dust effect on landing
+            const dustParticles = new THREE.Group();
+            
+            for (let i = 0; i < 8; i++) {
+              const particle = new THREE.Mesh(
+                new THREE.SphereGeometry(0.1, 8, 8),
+                new THREE.MeshBasicMaterial({ 
+                  color: 0xdddddd, 
+                  transparent: true, 
+                  opacity: 0.7 
+                })
+              );
+              
+              particle.position.set(
+                (Math.random() - 0.5) * 0.8,
+                0.05,
+                (Math.random() - 0.5) * 0.8
+              );
+              
+              dustParticles.add(particle);
+            }
+            
+            dustParticles.position.copy(this.playerMesh.position);
+            dustParticles.position.y = groundHeight + 0.05; // Just above ground
+            this.scene.add(dustParticles);
+            
+            // Fade out and remove
+            setTimeout(() => {
+              this.scene.remove(dustParticles);
+            }, 300);
+          }
+        }
+        
+        // Store falling velocity for impact calculations
+        this.fallVelocity = this.velocity.y;
+      }
+    }
+    
+    // Now handle standard collision detection for horizontal movement
+    // We rebuild the player bounding box as position might have changed
+    playerBox.setFromObject(this.playerMesh);
+    
     for (const platform of this.platforms) {
       const platformBox = new THREE.Box3().setFromObject(platform);
       
       if (playerBox.intersectsBox(platformBox)) {
-        // Check if the player is above the platform
-        const playerBottom = playerBox.min.y;
-        const platformTop = platformBox.max.y;
-        const wasAbove = playerBottom - this.velocity.y > platformTop;
-        
-        if (wasAbove && this.velocity.y < 0) {
-          // Land on the platform
-          this.playerMesh.position.y = platformTop + playerHeight / 2;
-          this.velocity.y = 0;
-          this.isJumping = false;
-        } else {
-          // Side or bottom collision - push player away
-          const overlap = new THREE.Vector3();
+        // If we're already handled as being on ground, only handle horizontal collisions
+        if (onGround && this.playerMesh.position.y > platform.position.y) {
+          // We're on top of this or another platform, so only handle horizontal
+          // Calculate overlap in each direction
+          const platformSize = new THREE.Vector3();
+          platformBox.getSize(platformSize);
+          
+          const xOverlap = (playerWidth + platformSize.x) / 2 - Math.abs(this.playerMesh.position.x - platform.position.x);
+          const zOverlap = (playerDepth + platformSize.z) / 2 - Math.abs(this.playerMesh.position.z - platform.position.z);
+          
+          if (xOverlap < zOverlap) {
+            // X-axis collision
+            const direction = this.playerMesh.position.x < platform.position.x ? -1 : 1;
+            this.playerMesh.position.x = platform.position.x + (direction * (platformSize.x + playerWidth) / 2);
+            this.velocity.x = 0;
+          } else {
+            // Z-axis collision
+            const direction = this.playerMesh.position.z < platform.position.z ? -1 : 1;
+            this.playerMesh.position.z = platform.position.z + (direction * (platformSize.z + playerDepth) / 2);
+            this.velocity.z = 0;
+          }
+        } else if (!onGround) {
+          // We're not on ground, handle all collisions normally
           const platformSize = new THREE.Vector3();
           platformBox.getSize(platformSize);
           
           // Calculate overlap in each direction
-          const xOverlap = (playerWidth + platformSize.x) / 2 - Math.abs(originalPosition.x - platform.position.x);
-          const yOverlap = (playerHeight + platformSize.y) / 2 - Math.abs(originalPosition.y - platform.position.y);
-          const zOverlap = (playerDepth + platformSize.z) / 2 - Math.abs(originalPosition.z - platform.position.z);
+          const xOverlap = (playerWidth + platformSize.x) / 2 - Math.abs(this.playerMesh.position.x - platform.position.x);
+          const yOverlap = (playerHeight + platformSize.y) / 2 - Math.abs(this.playerMesh.position.y - platform.position.y);
+          const zOverlap = (playerDepth + platformSize.z) / 2 - Math.abs(this.playerMesh.position.z - platform.position.z);
           
           // Find smallest overlap (to push in that direction)
           if (xOverlap < yOverlap && xOverlap < zOverlap) {
             // X-axis collision
-            const direction = originalPosition.x < platform.position.x ? -1 : 1;
+            const direction = this.playerMesh.position.x < platform.position.x ? -1 : 1;
             this.playerMesh.position.x = platform.position.x + (direction * (platformSize.x + playerWidth) / 2);
             this.velocity.x = 0;
           } else if (yOverlap < zOverlap) {
             // Y-axis collision (not from above)
-            if (originalPosition.y > platform.position.y) {
+            if (this.playerMesh.position.y > platform.position.y) {
               // Bottom collision - bounce down
               this.playerMesh.position.y = platformBox.max.y + playerHeight / 2;
               this.velocity.y = 0;
+              this.isJumping = false;
             } else {
               // Player hit ceiling - stop upward movement
               this.playerMesh.position.y = platformBox.min.y - playerHeight / 2;
@@ -4477,12 +4564,17 @@ export default class MultiplayerPlatformer {
             }
           } else {
             // Z-axis collision
-            const direction = originalPosition.z < platform.position.z ? -1 : 1;
+            const direction = this.playerMesh.position.z < platform.position.z ? -1 : 1;
             this.playerMesh.position.z = platform.position.z + (direction * (platformSize.z + playerDepth) / 2);
             this.velocity.z = 0;
           }
         }
       }
+    }
+    
+    // Update jumping state
+    if (!onGround && this.velocity.y <= 0) {
+      this.isJumping = true;
     }
   }
   
