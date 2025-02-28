@@ -1,8 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { Server as SocketIOServer } from "socket.io";
-import { WebSocketServer } from "ws";
-import WebSocket from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { Character } from "../shared/schema";
 import { pool } from "./db";
@@ -76,6 +75,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix with /api
   app.get("/api/health", (req, res) => {
     res.json({ status: "healthy" });
+  });
+  
+  // Clear the SSR cache when requested (useful for deployments)
+  app.post("/api/clear-cache", (req, res) => {
+    clearPageCache();
+    res.json({ status: "success", message: "Page cache cleared" });
   });
 
   // Game-related API endpoints
@@ -516,5 +521,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Set up WebSocket server for additional real-time communication if needed
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  wss.on('connection', (ws) => {
+    console.log('WebSocket client connected');
+    
+    ws.on('message', (message) => {
+      console.log('Received message:', message.toString());
+      
+      // Echo the message back
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+          type: 'echo', 
+          message: message.toString(),
+          timestamp: Date.now()
+        }));
+      }
+    });
+    
+    ws.on('close', () => {
+      console.log('WebSocket client disconnected');
+    });
+  });
+  
+  // Add SSR route handler for all non-API routes - must be the last route
+  app.get('*', (req, res, next) => {
+    // Skip API routes and static assets
+    if (req.path.startsWith('/api/') || 
+        req.path.startsWith('/assets/') ||
+        req.path.includes('.')) {
+      return next();
+    }
+    
+    // Render the page with SSR
+    renderPage(req, res, next);
+  });
+  
   return httpServer;
 }
