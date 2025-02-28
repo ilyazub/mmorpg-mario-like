@@ -1082,20 +1082,73 @@ export default class MultiplayerPlatformer {
     // Add zone-specific features based on grid location
     const distanceFromCenter = Math.sqrt(gridX * gridX + gridZ * gridZ);
     
-    // More platforms and features in outer zones
-    const platformCount = Math.floor(2 + Math.random() * 4 * distanceFromCenter);
+    // Determine zone difficulty and density based on distance from center
+    const zoneDifficulty = Math.min(1.0, distanceFromCenter / 10); // 0 to 1 difficulty scale
+    const shouldAddSpecialFeatures = Math.random() < (0.1 + zoneDifficulty * 0.4); // More special features in harder zones
+    
+    // More platforms and features in outer zones, with enhanced density
+    const platformCount = Math.floor(3 + Math.random() * 5 * (1 + zoneDifficulty));
     for (let i = 0; i < platformCount; i++) {
       const offsetX = (Math.random() - 0.5) * this.zoneSize * 0.8;
       const offsetZ = (Math.random() - 0.5) * this.zoneSize * 0.8;
-      this.generatePlatform(worldZ + offsetZ, worldX + offsetX);
+      
+      // Higher platforms in more distant zones
+      const heightMultiplier = 1 + zoneDifficulty * 2;
+      const platformHeight = 1 + Math.random() * heightMultiplier;
+      
+      this.generatePlatform(worldZ + offsetZ, worldX + offsetX, platformHeight);
+      
+      // Add collectibles on some platforms
+      if (Math.random() < 0.3 + zoneDifficulty * 0.2) {
+        // 30-50% chance to add collectible based on zone difficulty
+        this.generateCollectible(worldX + offsetX, platformHeight + 0.6, worldZ + offsetZ);
+      }
     }
     
-    // Add zone-specific decorations
-    const decorationCount = Math.floor(3 + Math.random() * 5);
+    // Add zone-specific decorations with increased variety
+    const decorationCount = Math.floor(3 + Math.random() * (5 + zoneDifficulty * 3));
     for (let i = 0; i < decorationCount; i++) {
       const offsetX = (Math.random() - 0.5) * this.zoneSize * 0.9;
       const offsetZ = (Math.random() - 0.5) * this.zoneSize * 0.9;
       this.generateDecoration(worldX + offsetX, worldZ + offsetZ);
+    }
+    
+    // Add enemies with increasing frequency in farther zones
+    const enemyCount = Math.floor(Math.random() * 3 * zoneDifficulty);
+    if (enemyCount > 0) {
+      for (let i = 0; i < enemyCount; i++) {
+        const offsetX = (Math.random() - 0.5) * this.zoneSize * 0.7;
+        const offsetZ = (Math.random() - 0.5) * this.zoneSize * 0.7;
+        this.generateEnemy(worldX + offsetX, worldZ + offsetZ, zoneDifficulty);
+      }
+    }
+    
+    // Handle special zone features like jumppads, portals, etc
+    if (shouldAddSpecialFeatures) {
+      const featureType = Math.floor(Math.random() * 3);
+      const offsetX = (Math.random() - 0.3) * this.zoneSize * 0.6;
+      const offsetZ = (Math.random() - 0.3) * this.zoneSize * 0.6;
+      
+      switch(featureType) {
+        case 0:
+          // Add jump boost pad
+          this.generateJumpPad(worldX + offsetX, worldZ + offsetZ);
+          break;
+        case 1:
+          // Add speed boost zone
+          this.generateSpeedBoost(worldX + offsetX, worldZ + offsetZ);
+          break;
+        case 2:
+          // Add teleporter (if implemented)
+          // this.generateTeleporter(worldX + offsetX, worldZ + offsetZ);
+          // Fallback to collectible cluster if teleporter not implemented
+          for (let i = 0; i < 3; i++) {
+            const clusterOffsetX = offsetX + (Math.random() - 0.5) * 2;
+            const clusterOffsetZ = offsetZ + (Math.random() - 0.5) * 2;
+            this.generateCollectible(worldX + clusterOffsetX, 1.5, worldZ + clusterOffsetZ);
+          }
+          break;
+      }
     }
     
     // Add collision data for this zone
@@ -1390,7 +1443,7 @@ export default class MultiplayerPlatformer {
     this.spawnRandomPowerUp(currentX, currentHeight + 3, currentZ);
   }
   
-  generatePlatform(z, x = undefined) {
+  generatePlatform(z, x = undefined, customHeight = undefined) {
     const currentTheme = this.themeProperties[this.currentTheme];
     
     // Generate platform with random properties
@@ -1401,7 +1454,8 @@ export default class MultiplayerPlatformer {
     // Random position - keep platforms accessible but varied
     // Use provided x if available, otherwise randomize
     const posX = x !== undefined ? x : (Math.random() - 0.5) * 20;
-    const posY = 1 + Math.random() * 5;
+    // Use custom height if provided
+    const posY = customHeight !== undefined ? customHeight : (1 + Math.random() * 5);
     const posZ = z;
     
     // Randomize platform type for variety
@@ -3476,8 +3530,10 @@ export default class MultiplayerPlatformer {
     }
     
     // Also clean up decorations and platforms that are too far away
-    // For platforms
+    // For platforms - using extended cleanup distance for better persistence
     const distantPlatforms = [];
+    const platformCleanupDistance = cleanupDistance + 2; // Extended visibility range
+    
     this.platforms.forEach((platform, index) => {
       if (!platform.position) return;
       
@@ -3487,9 +3543,12 @@ export default class MultiplayerPlatformer {
       const distanceX = Math.abs(platformGridX - playerGridX);
       const distanceZ = Math.abs(platformGridZ - playerGridZ);
       
-      if (distanceX > cleanupDistance || distanceZ > cleanupDistance) {
+      // Use extended distance to prevent premature unloading
+      if (distanceX > platformCleanupDistance || distanceZ > platformCleanupDistance) {
         distantPlatforms.push(index);
         this.scene.remove(platform);
+        // For debugging persistence issues
+        // console.log(`Removing platform at grid (${platformGridX}, ${platformGridZ}), distance: (${distanceX}, ${distanceZ})`);
       }
     });
     
@@ -3498,8 +3557,10 @@ export default class MultiplayerPlatformer {
       this.platforms.splice(distantPlatforms[i], 1);
     }
     
-    // For decorations
+    // For decorations - also using extended distance for better visual consistency
     const distantDecorations = [];
+    const decorationCleanupDistance = cleanupDistance + 1; // Slightly extended visibility
+    
     this.decorations.forEach((decoration, index) => {
       if (!decoration.position) return;
       
@@ -3509,7 +3570,8 @@ export default class MultiplayerPlatformer {
       const distanceX = Math.abs(decorationGridX - playerGridX);
       const distanceZ = Math.abs(decorationGridZ - playerGridZ);
       
-      if (distanceX > cleanupDistance || distanceZ > cleanupDistance) {
+      // Use extended distance to prevent pop-in/pop-out visual artifacts
+      if (distanceX > decorationCleanupDistance || distanceZ > decorationCleanupDistance) {
         distantDecorations.push(index);
         this.scene.remove(decoration);
       }
@@ -4286,5 +4348,417 @@ export default class MultiplayerPlatformer {
     
     // Start the game
     this.isRunning = true;
+  }
+  
+  // Generate a collectible item (coin, power-up, etc.)
+  generateCollectible(x, y, z, type = 'coin') {
+    let collectible;
+    
+    if (type === 'coin') {
+      // Create a coin collectible
+      const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
+      const material = new THREE.MeshStandardMaterial({ 
+        color: 0xFFD700, // Gold
+        metalness: 1,
+        roughness: 0.3,
+        emissive: 0x665000,
+        emissiveIntensity: 0.5
+      });
+      
+      collectible = new THREE.Mesh(geometry, material);
+      collectible.rotation.x = Math.PI / 2; // Make it flat
+      
+      // Store collectible data
+      collectible.userData = {
+        segmentType: 'coin',
+        type: 'coin',
+        isCollected: false,
+        zPosition: z,
+        value: 10,
+        rotationSpeed: 0.02 + Math.random() * 0.02,
+        collectibleId: `coin_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+      };
+      
+      this.coins.push(collectible);
+    } else if (type === 'power-up') {
+      // Create a power-up collectible (e.g. speed boost)
+      const geometry = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+      const material = new THREE.MeshStandardMaterial({ 
+        color: 0x00FFFF, // Cyan
+        metalness: 0.7,
+        roughness: 0.2,
+        emissive: 0x00AAAA,
+        emissiveIntensity: 0.5
+      });
+      
+      collectible = new THREE.Mesh(geometry, material);
+      
+      // Store collectible data
+      collectible.userData = {
+        segmentType: 'powerUp',
+        type: 'speed',
+        isCollected: false,
+        zPosition: z,
+        value: 0,
+        rotationSpeed: 0.03,
+        collectibleId: `powerup_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+      };
+      
+      this.powerUps.push(collectible);
+    }
+    
+    if (collectible) {
+      collectible.position.set(x, y, z);
+      collectible.castShadow = true;
+      this.scene.add(collectible);
+      
+      // Persist to database for multiplayer
+      this.socket.emit('obstacleCreate', {
+        id: collectible.userData.collectibleId,
+        type: collectible.userData.type,
+        position: { x, y, z },
+        worldId: 1
+      });
+    }
+    
+    return collectible;
+  }
+  
+  // Generate a jump pad at a position
+  generateJumpPad(x, z) {
+    // Create the jump pad base
+    const baseGeometry = new THREE.CylinderGeometry(1.2, 1.5, 0.3, 16);
+    const baseMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xFF5500, // Orange
+      metalness: 0.7,
+      roughness: 0.3
+    });
+    
+    const jumpPad = new THREE.Mesh(baseGeometry, baseMaterial);
+    jumpPad.position.set(x, 0.15, z); // Slightly above ground
+    jumpPad.receiveShadow = true;
+    jumpPad.castShadow = true;
+    
+    // Create the jump pad spring
+    const springGeometry = new THREE.CylinderGeometry(0.8, 0.8, 0.2, 16);
+    const springMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xFFAA00, // Light orange
+      metalness: 0.5,
+      roughness: 0.5,
+      emissive: 0xAA5500,
+      emissiveIntensity: 0.3
+    });
+    
+    const spring = new THREE.Mesh(springGeometry, springMaterial);
+    spring.position.y = 0.25; // Position on top of base
+    jumpPad.add(spring);
+    
+    // Create the jump pad arrow indicator
+    const arrowGeometry = new THREE.ConeGeometry(0.4, 0.6, 8);
+    const arrowMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xFFFF00, // Yellow
+      emissive: 0xAAAA00,
+      emissiveIntensity: 0.5
+    });
+    
+    const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+    arrow.position.y = 0.7; // Position above the spring
+    arrow.rotation.x = Math.PI; // Point upward
+    jumpPad.add(arrow);
+    
+    // Store jump pad data
+    jumpPad.userData = {
+      type: 'jumpPad',
+      isCollidable: true,
+      jumpForce: 0.5, // Higher jump force than normal
+      cooldown: 0,
+      springHeight: 0,
+      springState: 'rest',
+      segmentType: 'interactive',
+      zPosition: z,
+      id: `jumppad_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    };
+    
+    // Add animation data
+    jumpPad.tick = (delta) => {
+      // Animate the spring and arrow
+      if (jumpPad.userData.springState === 'compressed') {
+        jumpPad.userData.springHeight += 0.1;
+        spring.scale.y = 0.5 + Math.min(jumpPad.userData.springHeight, 1) * 0.5;
+        spring.position.y = 0.25 * spring.scale.y;
+        arrow.position.y = 0.5 + spring.position.y + 0.2;
+        
+        if (jumpPad.userData.springHeight >= 1) {
+          jumpPad.userData.springState = 'rest';
+        }
+      }
+      
+      // Handle cooldown
+      if (jumpPad.userData.cooldown > 0) {
+        jumpPad.userData.cooldown -= delta;
+      }
+      
+      // Make arrow pulse
+      const time = Date.now() * 0.001;
+      arrow.scale.y = 1 + Math.sin(time * 3) * 0.1;
+    };
+    
+    // Add jump pad to scene and track it
+    this.scene.add(jumpPad);
+    
+    // Make sure we have an array to track interactive objects
+    if (!this.interactiveObjects) {
+      this.interactiveObjects = [];
+    }
+    
+    this.interactiveObjects.push(jumpPad);
+    
+    // Persist to database
+    this.socket.emit('obstacleCreate', {
+      id: jumpPad.userData.id,
+      type: 'jumpPad',
+      position: { x, y: 0.15, z },
+      worldId: 1
+    });
+    
+    return jumpPad;
+  }
+  
+  // Generate a speed boost pad at a position
+  generateSpeedBoost(x, z) {
+    // Create the speed boost pad
+    const baseGeometry = new THREE.BoxGeometry(2, 0.1, 4);
+    const baseMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x00AAFF, // Blue
+      metalness: 0.8,
+      roughness: 0.2,
+      emissive: 0x0055AA,
+      emissiveIntensity: 0.3
+    });
+    
+    const speedBoost = new THREE.Mesh(baseGeometry, baseMaterial);
+    speedBoost.position.set(x, 0.05, z); // Just above ground
+    speedBoost.receiveShadow = true;
+    
+    // Create arrow indicators showing direction
+    const arrowCount = 3;
+    for (let i = 0; i < arrowCount; i++) {
+      const arrowGeometry = new THREE.ConeGeometry(0.3, 0.6, 8);
+      const arrowMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x00FFFF, // Cyan
+        emissive: 0x00AAAA,
+        emissiveIntensity: 0.5
+      });
+      
+      const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+      // Position arrows along the pad, pointing forward
+      arrow.position.set(0, 0.3, -0.8 + i * 0.8); 
+      arrow.rotation.x = -Math.PI / 2; // Point in the Z direction
+      speedBoost.add(arrow);
+    }
+    
+    // Create particles for visual effect
+    const particleCount = 30;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0x00FFFF,
+      size: 0.1,
+      transparent: true,
+      opacity: 0.5
+    });
+    
+    const positions = new Float32Array(particleCount * 3);
+    const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+    
+    // Distribute particles along the speed pad
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      positions[i3] = (Math.random() - 0.5) * 1.5;     // x
+      positions[i3 + 1] = 0.1 + Math.random() * 0.3;   // y
+      positions[i3 + 2] = (Math.random() - 0.5) * 3.5; // z
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    speedBoost.add(particleSystem);
+    
+    // Store speed boost data
+    speedBoost.userData = {
+      type: 'speedBoost',
+      isCollidable: true,
+      speedMultiplier: 2.0, // Double the player's speed
+      boostDuration: 180, // 3 seconds at 60fps
+      segmentType: 'interactive',
+      zPosition: z,
+      id: `speedboost_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    };
+    
+    // Add animation function
+    speedBoost.tick = (delta) => {
+      // Animate particles
+      const positions = particleGeometry.attributes.position.array;
+      
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        // Move particles upward and reset when they get too high
+        positions[i3 + 1] += 0.01;
+        
+        if (positions[i3 + 1] > 0.5) {
+          positions[i3] = (Math.random() - 0.5) * 1.5;
+          positions[i3 + 1] = 0.1;
+          positions[i3 + 2] = (Math.random() - 0.5) * 3.5;
+        }
+      }
+      
+      particleGeometry.attributes.position.needsUpdate = true;
+      
+      // Pulse the pad
+      const time = Date.now() * 0.001;
+      speedBoost.scale.y = 1 + Math.sin(time * 5) * 0.2;
+    };
+    
+    // Add speed boost to scene and track it
+    this.scene.add(speedBoost);
+    
+    // Make sure we have an array to track interactive objects
+    if (!this.interactiveObjects) {
+      this.interactiveObjects = [];
+    }
+    
+    this.interactiveObjects.push(speedBoost);
+    
+    // Persist to database
+    this.socket.emit('obstacleCreate', {
+      id: speedBoost.userData.id,
+      type: 'speedBoost',
+      position: { x, y: 0.05, z },
+      worldId: 1
+    });
+    
+    return speedBoost;
+  }
+  
+  // Generate an enemy at a position
+  generateEnemy(x, z, difficulty = 0) {
+    // Get ground height at position
+    const groundHeight = 0; // Default to 0, implement terrain height lookup if needed
+    
+    // Select enemy type based on difficulty
+    // Higher difficulty = more challenging enemies
+    // Use the existing NPC types defined in generateNPCForPlatform
+    const enemyTypeIndex = Math.min(
+      Math.floor(Math.random() * 5 + difficulty * 2), 
+      this.npcTypes ? this.npcTypes.length - 1 : 0
+    );
+    
+    // If NPC types aren't defined yet, create a default enemy
+    if (!this.npcTypes || this.npcTypes.length === 0) {
+      // Create a simple enemy
+      const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+      const material = new THREE.MeshStandardMaterial({ color: 0xFF0000 });
+      
+      const enemy = new THREE.Mesh(geometry, material);
+      enemy.position.set(x, groundHeight + 0.4, z);
+      enemy.castShadow = true;
+      
+      enemy.userData = {
+        type: 'enemy',
+        movementStyle: 'ground',
+        moveSpeed: 0.02,
+        moveDirection: new THREE.Vector3(1, 0, 0),
+        movementRange: 3,
+        isMoving: true,
+        isCrushed: false,
+        startX: x,
+        startY: groundHeight + 0.4,
+        startZ: z,
+        attackCooldown: 0,
+        id: `enemy_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+      };
+      
+      this.crushableObstacles.push(enemy);
+      this.scene.add(enemy);
+      
+      return enemy;
+    }
+    
+    // Get selected enemy type
+    const enemyType = this.npcTypes[enemyTypeIndex];
+    
+    // Create the enemy with the selected type
+    const enemy = new THREE.Mesh(enemyType.geometry.clone(), enemyType.material.clone());
+    
+    // Position based on movement style
+    let y = groundHeight + 0.4;
+    if (enemyType.movementStyle === 'flying') {
+      y = groundHeight + 1.5;
+    } else if (enemyType.movementStyle === 'ghost') {
+      y = groundHeight + 1.0;
+    }
+    
+    enemy.position.set(x, y, z);
+    enemy.castShadow = true;
+    
+    // Generate random movement direction
+    const angle = Math.random() * Math.PI * 2;
+    const moveDirection = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize();
+    
+    // Setup enemy data
+    enemy.userData = {
+      type: enemyType.name,
+      movementStyle: enemyType.movementStyle,
+      moveSpeed: enemyType.speed * (1 + difficulty * 0.5), // Increase speed with difficulty
+      moveDirection: moveDirection,
+      movementRange: 3 + Math.random() * 2,
+      isMoving: true,
+      isCrushed: false,
+      startX: x,
+      startY: y,
+      startZ: z,
+      originalY: y,
+      jumpHeight: enemyType.jumpHeight,
+      jumpTime: Math.random() * Math.PI * 2, // Random starting phase
+      strength: enemyType.strength,
+      crushable: enemyType.crushable,
+      attackCooldown: 0,
+      wingFlapDirection: 1,
+      wingFlapSpeed: 0.05,
+      ghostTimer: Math.random() * Math.PI * 2,
+      id: `enemy_${enemyType.name.toLowerCase()}_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    };
+    
+    // Create additional features for different enemy types
+    if (enemyType.movementStyle === 'flying') {
+      // Add wings for flying enemies
+      const wings = [];
+      
+      // Left wing
+      const leftWingGeometry = new THREE.BoxGeometry(0.8, 0.1, 0.4);
+      const wingMaterial = new THREE.MeshStandardMaterial({ color: 0xCCCCCC });
+      const leftWing = new THREE.Mesh(leftWingGeometry, wingMaterial);
+      leftWing.position.set(0.5, 0, 0);
+      enemy.add(leftWing);
+      wings.push(leftWing);
+      
+      // Right wing
+      const rightWing = new THREE.Mesh(leftWingGeometry.clone(), wingMaterial.clone());
+      rightWing.position.set(-0.5, 0, 0);
+      enemy.add(rightWing);
+      wings.push(rightWing);
+      
+      enemy.userData.wings = wings;
+    }
+    
+    this.crushableObstacles.push(enemy);
+    this.scene.add(enemy);
+    
+    // Persist to database for multiplayer
+    this.socket.emit('obstacleCreate', {
+      id: enemy.userData.id,
+      type: 'npc-' + this.crushableObstacles.length,
+      position: { x, y, z },
+      worldId: 1
+    });
+    
+    return enemy;
   }
 }
