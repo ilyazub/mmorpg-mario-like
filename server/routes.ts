@@ -152,14 +152,32 @@ const obstacles = new Map<string, ObstacleData>();
 const elements = new Map<string, ElementData>();
 const DEFAULT_WORLD_ID = 1;
 
+// Cache game worlds to avoid duplicate database calls
+let cachedGameWorlds: any[] = [];
+let lastWorldsFetchTime = 0;
+const WORLDS_CACHE_TTL = 60 * 1000; // 1 minute cache TTL
+
+// Helper function to get game worlds with caching
+async function getGameWorlds() {
+  const now = Date.now();
+  if (cachedGameWorlds.length === 0 || now - lastWorldsFetchTime > WORLDS_CACHE_TTL) {
+    cachedGameWorlds = await storage.getActiveGameWorlds();
+    lastWorldsFetchTime = now;
+    console.log(`Fetched ${cachedGameWorlds.length} game worlds from database.`);
+  }
+  return cachedGameWorlds;
+}
+
 // Initialize game world on startup
 async function initializeGameWorld() {
   try {
-    const worlds = await storage.getActiveGameWorlds();
+    const worlds = await getGameWorlds();
     if (worlds.length === 0) {
       console.log('No active game worlds found. Creating default game world...');
       await storage.createGameWorld('Default World', 'The main game world for multiplayer platformer', 1);
       console.log('Default game world created successfully with ID:', DEFAULT_WORLD_ID);
+      // Refresh cache after creating a world
+      cachedGameWorlds = [];
     } else {
       console.log(`Found ${worlds.length} existing game worlds.`);
     }
@@ -263,7 +281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.get("/api/worlds", async (req, res) => {
-    const worlds = await storage.getActiveGameWorlds();
+    const worlds = await getGameWorlds();
     res.json(worlds);
   });
   
