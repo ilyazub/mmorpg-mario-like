@@ -2,10 +2,6 @@
   "version": 2,
   "builds": [
     {
-      "src": "functions/**/*.js",
-      "use": "@vercel/node"
-    },
-    {
       "src": "server/index.ts",
       "use": "@vercel/node",
       "config": {
@@ -13,14 +9,6 @@
           "shared/**",
           "drizzle.config.ts"
         ]
-      }
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist",
-        "installCommand": "npm install"
       }
     }
   ],
