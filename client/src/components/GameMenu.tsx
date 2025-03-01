@@ -1,13 +1,11 @@
 interface GameMenuProps {
   onStartGame: () => void;
   onShowInstructions: () => void;
-  onShowSettings: () => void;
 }
 
 export default function GameMenu({ 
   onStartGame, 
-  onShowInstructions, 
-  onShowSettings 
+  onShowInstructions
 }: GameMenuProps) {
   return (
     <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-3">
@@ -23,13 +21,6 @@ export default function GameMenu({
         onClick={onShowInstructions}
       >
         INSTRUCTIONS
-      </button>
-      
-      <button 
-        className="font-pixel text-white bg-pipe-green px-4 py-2 rounded hover:bg-green-700 transition"
-        onClick={onShowSettings}
-      >
-        SETTINGS
       </button>
     </div>
   );
