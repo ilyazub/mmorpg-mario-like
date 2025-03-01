@@ -168,27 +168,6 @@ async function getGameWorlds() {
   return cachedGameWorlds;
 }
 
-// Initialize game world on startup
-async function initializeGameWorld() {
-  try {
-    const worlds = await getGameWorlds();
-    if (worlds.length === 0) {
-      console.log('No active game worlds found. Creating default game world...');
-      await storage.createGameWorld('Default World', 'The main game world for multiplayer platformer', 1);
-      console.log('Default game world created successfully with ID:', DEFAULT_WORLD_ID);
-      // Refresh cache after creating a world
-      cachedGameWorlds = [];
-    } else {
-      console.log(`Found ${worlds.length} existing game worlds.`);
-    }
-  } catch (error) {
-    console.error('Error initializing game world:', error);
-  }
-}
-
-// Run initialization
-initializeGameWorld();
-
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix with /api
   // Health check moved to a single implementation below
