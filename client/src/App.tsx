@@ -45,7 +45,7 @@ function Router() {
           </div>
         </div>
       )} />
-      <Route path="/test-canvas" component={TestCanvas} />
+      <Route path="/test-canvas" component={() => <TestCanvas />} />
       <Route component={NotFound} />
     </Switch>
   );
