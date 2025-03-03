@@ -2,6 +2,9 @@ import * as THREE from "three";
 // Using native WebSockets instead of Socket.io
 // import { io } from 'socket.io-client';
 
+// Make sure WebSocket is available
+const WebSocket = window.WebSocket || globalThis.WebSocket;
+
 export default class MultiplayerPlatformer {
   /**
    * Initialize the multiplayer platformer game
@@ -9,6 +12,15 @@ export default class MultiplayerPlatformer {
    * @param {string} [wsUrl] - Optional WebSocket URL for multiplayer features
    */
   constructor(container, wsUrl) {
+    // Save references to constructor params
+    this.container = container;
+    this.wsUrl = wsUrl;
+    
+    // Make sure THREE is available
+    if (!THREE) {
+      console.error("THREE is not defined - this will cause errors");
+    }
+    
     // Game state
     this.isRunning = false;
     this.score = 0;

@@ -1,83 +1,104 @@
-import { useState } from 'react';
-import { Box, Flex, Heading, Button, Text, Card, Container } from '@radix-ui/themes';
-
-interface Character {
-  id: string;
-  name: string;
-  color: string;
-  speed: number;
-  jumpHeight: number;
-}
-
-const characters: Character[] = [
-  { id: 'blue', name: 'Azura', color: '#4169E1', speed: 1.2, jumpHeight: 1.0 },
-  { id: 'red', name: 'Flamex', color: '#FF4500', speed: 1.0, jumpHeight: 1.2 },
-  { id: 'green', name: 'Terra', color: '#32CD32', speed: 1.1, jumpHeight: 1.1 }
-];
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Character } from "@shared/schema";
 
 interface CharacterSelectProps {
-  onCharacterSelected: (characterId: string) => void;
+  onCharacterSelected: (character: Character) => void;
   onStart: () => void;
 }
 
 export default function CharacterSelect({ onCharacterSelected, onStart }: CharacterSelectProps) {
-  const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
+  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
   
-  const handleSelectCharacter = (characterId: string) => {
-    setSelectedCharacter(characterId);
-    onCharacterSelected(characterId);
+  // Sample characters - these would come from the database in the final version
+  const characters: Character[] = [
+    {
+      id: "red-pilot",
+      name: "Red Pilot",
+      sprite: "red-pilot.png",
+      speed: 12,
+      jump: 15,
+    },
+    {
+      id: "blue-ninja",
+      name: "Blue Ninja",
+      sprite: "blue-ninja.png",
+      speed: 15,
+      jump: 12,
+    },
+    {
+      id: "green-explorer",
+      name: "Green Explorer",
+      sprite: "green-explorer.png",
+      speed: 10,
+      jump: 18,
+    },
+  ];
+  
+  const handleSelectCharacter = (character: Character) => {
+    setSelectedCharacter(character);
+    onCharacterSelected(character);
   };
   
   return (
-    <Container size="3" className="h-full">
-      <Flex direction="column" gap="6" align="center" justify="center" className="h-full">
-        <Heading size="8" className="text-center" style={{ textShadow: '0 0 10px rgba(50, 150, 255, 0.8)' }}>
-          HUBAOBA
-        </Heading>
-        <Text size="5" className="text-center">Select your character</Text>
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900/90 to-purple-800/90 backdrop-blur-sm z-40">
+      <motion.div
+        className="bg-gray-900/80 p-8 rounded-xl shadow-2xl max-w-4xl w-full"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        <h1 className="text-4xl font-bold mb-8 text-center text-white">Choose Your Character</h1>
         
-        <Flex gap="4" wrap="wrap" justify="center">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {characters.map((character) => (
-            <Card 
+            <motion.div
               key={character.id}
-              className={`cursor-pointer transition-transform hover:scale-105 ${selectedCharacter === character.id ? 'ring-4 ring-blue-500' : ''}`}
-              onClick={() => handleSelectCharacter(character.id)}
+              className={`bg-gray-800 p-6 rounded-lg cursor-pointer transition-colors ${
+                selectedCharacter?.id === character.id ? 'ring-2 ring-purple-500 bg-gray-700' : ''
+              }`}
+              whileHover={{ scale: 1.05 }}
+              onClick={() => handleSelectCharacter(character)}
             >
-              <Flex direction="column" gap="3" align="center" p="4">
-                <Box 
-                  className="w-16 h-16 rounded-md"
-                  style={{ backgroundColor: character.color }}
-                />
-                <Heading size="4">{character.name}</Heading>
-                <Flex gap="4">
-                  <Flex direction="column" align="center">
-                    <Text weight="bold">Speed</Text>
-                    <Text>{character.speed.toFixed(1)}</Text>
-                  </Flex>
-                  <Flex direction="column" align="center">
-                    <Text weight="bold">Jump</Text>
-                    <Text>{character.jumpHeight.toFixed(1)}</Text>
-                  </Flex>
-                </Flex>
-              </Flex>
-            </Card>
+              <div className="w-full h-40 mb-4 bg-gray-700 rounded-md flex items-center justify-center">
+                <div className={`w-24 h-24 rounded-full bg-${character.id.split('-')[0]}-500`}></div>
+              </div>
+              <h3 className="text-xl font-bold text-white">{character.name}</h3>
+              <div className="mt-2 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Speed</span>
+                  <div className="w-20 bg-gray-700 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500"
+                      style={{ width: `${(character.speed / 20) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Jump</span>
+                  <div className="w-20 bg-gray-700 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500"
+                      style={{ width: `${(character.jump / 20) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           ))}
-        </Flex>
+        </div>
         
-        <Flex gap="4" mt="6">
-          <Button 
-            size="3" 
-            disabled={!selectedCharacter}
+        <div className="flex justify-center">
+          <Button
             onClick={onStart}
+            disabled={!selectedCharacter}
+            className="py-6 px-8 text-lg bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:opacity-50"
           >
             Start Game
           </Button>
-          
-          <Button size="3" variant="soft">
-            Instructions
-          </Button>
-        </Flex>
-      </Flex>
-    </Container>
+        </div>
+      </motion.div>
+    </div>
   );
 }

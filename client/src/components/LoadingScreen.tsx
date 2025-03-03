@@ -1,35 +1,25 @@
-import { Flex, Heading, Text } from '@radix-ui/themes';
-import { useState, useEffect } from 'react';
+import { motion } from "framer-motion";
 
 export default function LoadingScreen() {
-  const [dots, setDots] = useState('');
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDots(prev => (prev.length >= 3 ? '' : prev + '.'));
-    }, 500);
-    
-    return () => clearInterval(interval);
-  }, []);
-  
   return (
-    <Flex 
-      direction="column" 
-      justify="center" 
-      align="center" 
-      className="w-full h-full bg-slate-900"
-    >
-      <div className="animate-spin w-16 h-16 border-4 border-t-blue-500 rounded-full mb-6" />
-      <Heading 
-        size="6" 
-        className="text-white"
-        style={{ textShadow: '0 0 10px rgba(50, 150, 255, 0.5)' }}
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-800 z-50">
+      <motion.div
+        className="flex flex-col items-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
       >
-        HUBAOBA
-      </Heading>
-      <Text size="4" className="text-blue-400 mt-2">
-        Loading{dots}
-      </Text>
-    </Flex>
+        <h1 className="text-5xl font-bold mb-8 text-white">Hubaoba</h1>
+        <div className="w-64 h-4 bg-gray-700 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-purple-500 to-blue-500"
+            initial={{ width: "0%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 2, ease: "easeInOut" }}
+          />
+        </div>
+        <p className="mt-4 text-gray-300">Loading game assets...</p>
+      </motion.div>
+    </div>
   );
 }

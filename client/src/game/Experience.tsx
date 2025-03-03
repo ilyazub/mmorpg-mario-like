@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Text, useKeyboardControls, Stars, Sky, Float } from '@react-three/drei';
+import { OrbitControls, Text, useKeyboardControls, Stars, Sky, Float, KeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useControls } from 'leva';
+import { create } from 'zustand';
 
 interface PlayerProps {
   position: [number, number, number];
@@ -168,38 +169,33 @@ export function Experience() {
   
   // Define platforms
   const platforms = [
-    { position: [0, -0.5, 0], size: [20, 1, 20], color: '#888888' }, // Main platform
-    { position: [-5, 1, -5], size: [3, 0.5, 3], color: '#aaaaaa' }, // Elevated platform 1
-    { position: [5, 2, 5], size: [3, 0.5, 3], color: '#aaaaaa' }, // Elevated platform 2
-    { position: [0, 3, -10], size: [3, 0.5, 3], color: '#aaaaaa' }, // Elevated platform 3
-    { position: [10, 4, 0], size: [3, 0.5, 3], color: '#aaaaaa' }, // Elevated platform 4
+    { position: [0, -0.5, 0] as [number, number, number], size: [20, 1, 20] as [number, number, number], color: '#888888' }, // Main platform
+    { position: [-5, 1, -5] as [number, number, number], size: [3, 0.5, 3] as [number, number, number], color: '#aaaaaa' }, // Elevated platform 1
+    { position: [5, 2, 5] as [number, number, number], size: [3, 0.5, 3] as [number, number, number], color: '#aaaaaa' }, // Elevated platform 2
+    { position: [0, 3, -10] as [number, number, number], size: [3, 0.5, 3] as [number, number, number], color: '#aaaaaa' }, // Elevated platform 3
+    { position: [10, 4, 0] as [number, number, number], size: [3, 0.5, 3] as [number, number, number], color: '#aaaaaa' }, // Elevated platform 4
   ];
   
   // Define coins
   const coins = [
-    { position: [-5, 2, -5] },
-    { position: [5, 3, 5] },
-    { position: [0, 4, -10] },
-    { position: [10, 5, 0] },
+    { position: [-5, 2, -5] as [number, number, number] },
+    { position: [5, 3, 5] as [number, number, number] },
+    { position: [0, 4, -10] as [number, number, number] },
+    { position: [10, 5, 0] as [number, number, number] },
   ];
 
-  useEffect(() => {
-    // Setup keyboard controls
-    const keyMap = [
-      { name: "forward", keys: ["ArrowUp", "KeyW"] },
-      { name: "backward", keys: ["ArrowDown", "KeyS"] },
-      { name: "left", keys: ["ArrowLeft", "KeyA"] },
-      { name: "right", keys: ["ArrowRight", "KeyD"] },
-      { name: "jump", keys: ["Space"] },
-      { name: "attack", keys: ["KeyF"] },
-    ];
-    
-    // Register control mappings
-    useKeyboardControls.setup(keyMap);
-  }, []);
+  // Define keyboard controls map
+  const keyboardMap = [
+    { name: "forward", keys: ["ArrowUp", "KeyW"] },
+    { name: "backward", keys: ["ArrowDown", "KeyS"] },
+    { name: "left", keys: ["ArrowLeft", "KeyA"] },
+    { name: "right", keys: ["ArrowRight", "KeyD"] },
+    { name: "jump", keys: ["Space"] },
+    { name: "attack", keys: ["KeyF"] },
+  ];
 
   return (
-    <>
+    <KeyboardControls map={keyboardMap}>
       {/* Environment setup */}
       <ambientLight intensity={0.5} />
       <directionalLight 
@@ -246,6 +242,6 @@ export function Experience() {
       
       {/* Controls for debugging */}
       <OrbitControls enabled={false} />
-    </>
+    </KeyboardControls>
   );
 }
